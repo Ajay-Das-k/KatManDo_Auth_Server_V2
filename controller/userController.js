@@ -1,4 +1,4 @@
-const dataBase = require("../models/stingModel");
+// const dataBase = require("../models/stingModel");
 
 
 
