@@ -17,15 +17,15 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.use(morgan("dev"));
 
-// Home Route – Render EJS Page
-app.get("/", (req, res) => {
-  res.render("home"); // Looks for views/home.ejs
-});
+// Import Routes
+const appscriptRoute = require("./routes/appscriptRoute");
+const serverGuiRoute = require("./routes/serverGuiRoute");
 
-// User Routes
-const userRoute = require("./routes/userRoute");
-app.use("/user", userRoute); // (optional: keep user APIs separated)
+// Use Routes
+app.use("/appscript", appscriptRoute); // Handle Appscript specific API logic
+app.use("/", serverGuiRoute); // Handle Server GUI related routes
 
+// Start the server
 app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);
 });
