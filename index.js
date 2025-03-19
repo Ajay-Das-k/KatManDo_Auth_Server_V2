@@ -3,9 +3,11 @@ const PORT = process.env.PORT || 3000;
 const morgan = require("morgan");
 const express = require("express");
 const path = require("path");
+const dbConnect = require("./config/dbConnect");
 
 const app = express();
-
+dbConnect.dbConnect();
+app.use(express.json());
 // Set EJS as view engine
 app.set("view engine", "ejs");
 
