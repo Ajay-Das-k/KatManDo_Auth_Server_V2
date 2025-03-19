@@ -19,24 +19,7 @@ const userSchema = new Schema({
     trim: true,
     match: [/.+\@.+\..+/, "Please fill a valid email address"], // Simple email validation
   },
-//   password: {
-//     type: String,
-//     required: true,
-//     minlength: [6, "Password must be at least 6 characters long"],
-//   },
-//   firstName: {
-//     type: String,
-//     required: true,
-//   },
-//   lastName: {
-//     type: String,
-//     required: true,
-//   },
-//   role: {
-//     type: String,
-//     enum: ["user", "admin"], // Can only be 'user' or 'admin'
-//     default: "user", // Default value if no role is provided
-//   },
+
   createdAt: {
     type: Date,
     default: Date.now, // Automatically set to the current date/time

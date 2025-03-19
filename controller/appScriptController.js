@@ -8,11 +8,12 @@ const authenticate = asyncHandler(async (req, res) => {
 
 // Function to handle user registration
 const userRegister = async (req, res) => {
-    const { username, email, password, firstName, lastName, role } = req.body;
+    const { googleSheetId, email} =
+      req.body;
 
     // Validate input fields
-    if (!username || !email || !password || !firstName || !lastName) {
-        return res.status(400).json({ message: 'All fields are required!' });
+    if (!googleSheetId || !email ) {
+      return res.status(400).json({ message: "All fields are required!" });
     }
 
     // Check if the user already exists by username or email
@@ -29,10 +30,7 @@ const userRegister = async (req, res) => {
         const newUser = new User({
           googleSheetId,
           email
-         //  password, // You should hash the password before saving it, more on that below
-         //  firstName,
-         //  lastName,
-         //  role: role || "user", // default to 'user' if role is not provided
+         
         });
 
         // Save the user to the database
