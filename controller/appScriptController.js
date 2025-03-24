@@ -8,47 +8,49 @@ const authenticate = asyncHandler(async (req, res) => {
 
 // Function to handle user registration
 const userRegister = async (req, res) => {
-    const { googleSheetId, email} =
-      req.body;
+  // Log the incoming request body to see the data being sent
+  console.log("Request Body:", req.body);
 
-    // Validate input fields
-    if (!googleSheetId || !email ) {
-      return res.status(400).json({ message: "All fields are required!" });
+  const { googleSheetId, email } = req.body;
+
+  // Validate input fields
+  if (!googleSheetId || !email) {
+    return res.status(400).json({ message: "All fields are required!" });
+  }
+
+  // Check if the user already exists by googleSheetId or email
+  try {
+    const existingUser = await User.findOne({
+      $or: [{ googleSheetId: googleSheetId }, { email: email }],
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists!" });
     }
 
-    // Check if the user already exists by username or email
-    try {
-        const existingUser = await User.findOne({
-          $or: [{ googleSheetId: googleSheetId }, { email: email }],
-        });
+    // Create a new user
+    const newUser = new User({
+      googleSheetId,
+      email,
+    });
 
-        if (existingUser) {
-            return res.status(400).json({ message: 'User already exists!' });
-        }
+    // Save the user to the database
+    const savedUser = await newUser.save();
 
-        // Create a new user
-        const newUser = new User({
-          googleSheetId,
-          email
-         
-        });
-
-        // Save the user to the database
-        const savedUser = await newUser.save();
-
-        // Send success response
-        res.status(201).json({
-          message: "User registered successfully!",
-          user: {
-            googleSheetId: savedUser.googleSheetId,
-            email: savedUser.email,
-          },
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
-    }
+    // Send success response
+    res.status(201).json({
+      message: "User registered successfully!",
+      user: {
+        googleSheetId: savedUser.googleSheetId,
+        email: savedUser.email,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
+
 
 const environmentData = asyncHandler(async (req, res) => {
   const envData = {
