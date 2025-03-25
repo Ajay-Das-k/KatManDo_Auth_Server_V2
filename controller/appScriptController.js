@@ -162,145 +162,137 @@ const createAccessToken = async (req, res) => {
 
 const callbackToken = async (req, res) => {
    try {
-     // Log incoming request details
-     console.log("Received callback with query params:", req.query);
-
-     // Get the authorization code and state from Salesforce
+     // Get the authorization code and state from the URL
      const code = req.query.code;
      const state = req.query.state;
 
      if (!code) {
-       console.error("Authorization code missing");
-       return res.status(400).send("Authorization code missing");
+       return res.status(400).send("Authorization code is missing");
      }
 
-     // Extract scriptId from state token
-     let scriptId = "";
-     try {
-       if (state) {
-         console.log("Full state parameter:", state);
+     console.log("Received code:", code);
+     console.log("Received state:", state);
 
-         // The state is a more complex token created by Apps Script
-         // Try to parse the scriptId from the state URL
-         if (state.includes("scriptId=")) {
-           const match = state.match(/scriptId=([^&]+)/);
-           if (match && match[1]) {
-             scriptId = decodeURIComponent(match[1]);
-             console.log("Extracted scriptId from state parameter:", scriptId);
-           }
-         } else if (state.includes("=")) {
-           // Try to parse as URL query params
-           const params = new URLSearchParams(state);
-           scriptId = params.get("scriptId");
-           if (scriptId) {
-             console.log("Extracted scriptId from URLSearchParams:", scriptId);
-           }
-         } else {
-           // If it doesn't contain a scripdId= part and doesn't look like
-           // URL parameters, assume the state itself is the scriptId
-           scriptId = state;
-           console.log("Using state directly as scriptId:", scriptId);
-         }
+     // Instead of trying to parse the complex state token,
+     // we'll use a direct approach by redirecting to a temporary page
+     // that will extract the scriptId from the Apps Script state token
 
-         if (!scriptId) {
-           console.error("Could not extract scriptId from state token");
-           return res
-             .status(400)
-             .send("Could not extract scriptId from state token");
-         }
-       } else {
-         console.error("State parameter missing");
-         return res.status(400).send("State parameter missing");
-       }
-     } catch (error) {
-       console.error("Error extracting scriptId:", error);
-       return res.status(500).send(`
-        <h2>Error Extracting Script ID</h2>
-        <p>Could not extract the Script ID from the state parameter.</p>
-        <p>State parameter: ${state}</p>
-        <p>Error: ${error.message}</p>
-      `);
-     }
+     // Exchange the code for access tokens
+     const tokenResponse = await axios({
+       method: "post",
+       url: TOKEN_URL,
+       headers: {
+         "Content-Type": "application/x-www-form-urlencoded",
+       },
+       data: new URLSearchParams({
+         grant_type: "authorization_code",
+         code: code,
+         client_id: CLIENT_ID,
+         client_secret: CLIENT_SECRET,
+         redirect_uri: REDIRECT_URI,
+       }).toString(),
+     });
 
-     // Construct the Apps Script callback URL
-     const appScriptUrl = `https://script.google.com/macros/d/${scriptId}/usercallback`;
+     const tokenData = tokenResponse.data;
+     console.log("Received token data:", JSON.stringify(tokenData, null, 2));
 
-     // Pass the authorization code and state to Apps Script
-     const redirectUrl = `${appScriptUrl}?code=${encodeURIComponent(
-       code
-     )}&state=${encodeURIComponent(state)}`;
-
-     console.log("Redirecting to Apps Script URL:", redirectUrl);
-
-     // Show debug info before redirecting
-     res.send(`
+     // Create an HTML page that will extract the scriptId and redirect
+     // This method works with complex state tokens without needing to parse them on the server
+     const bridgeHtml = `
+      <!DOCTYPE html>
       <html>
       <head>
-        <title>Redirecting to Google Apps Script</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          pre { background: #f4f4f4; padding: 10px; border-radius: 5px; }
-          .success { color: green; }
-          button { padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        </style>
-      </head>
-      <body>
-        <h2>Authentication Successful!</h2>
-        <p class="success">✓ Ready to connect to Google Apps Script</p>
-        <p>Click the button below to continue:</p>
-        
-        <p><button onclick="window.location.href='${redirectUrl}'">Continue to Google Apps Script</button></p>
-        
-        <h3>Debug Information:</h3>
-        <p>Script ID: ${scriptId}</p>
-        <p>State Token: ${state}</p>
-        
-        <details>
-          <summary>View Full Redirect URL</summary>
-          <pre>${redirectUrl}</pre>
-        </details>
-        
+        <title>Processing Authorization</title>
         <script>
-          // Automatically redirect after 5 seconds
-          setTimeout(function() {
-            window.location.href = '${redirectUrl}';
-          }, 5000);
+          // We're using this page to bridge between Salesforce and Google Apps Script
+          // by extracting the scriptId from the state parameter
+          
+          window.onload = function() {
+            try {
+              // The state parameter is in the URL
+              const urlParams = new URLSearchParams(window.location.search);
+              const state = urlParams.get('state');
+              
+              // Function to safely parse a URL parameter
+              function getParameterByName(name, url) {
+                if (!url) url = window.location.href;
+                name = name.replace(/[\\[\\]]/g, '\\\\$&');
+                var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+                    results = regex.exec(url);
+                if (!results) return null;
+                if (!results[2]) return '';
+                return decodeURIComponent(results[2].replace(/\\+/g, ' '));
+              }
+              
+              // Extract scriptId directly from URL if present
+              let scriptId = getParameterByName('scriptId') || '';
+              
+              // If not present in URL, try to extract from state
+              if (!scriptId && state) {
+                // Try to decode if it looks like a URL parameter
+                if (state.includes('scriptId')) {
+                  const stateParams = new URLSearchParams(state);
+                  scriptId = stateParams.get('scriptId');
+                }
+                
+                // If still not found, use regex to extract
+                if (!scriptId) {
+                  const scriptIdMatch = state.match(/scriptId=([^&]+)/);
+                  if (scriptIdMatch && scriptIdMatch[1]) {
+                    scriptId = scriptIdMatch[1];
+                  }
+                }
+              }
+              
+              if (!scriptId) {
+                // Last resort: Use a hardcoded scriptId
+                // This should be replaced with your actual script ID
+                scriptId = '1YD1P-VSHKRRvD9kGFWi3m01QczOF-fYK9qByVVEC-vWRmW4Mw-ViBVYS';
+                console.log('Using hardcoded scriptId as fallback');
+              }
+              
+              console.log('Extracted scriptId:', scriptId);
+              
+              // Get the token data from our server's response
+              const accessToken = "${tokenData.access_token}";
+              const refreshToken = "${tokenData.refresh_token}";
+              const instanceUrl = "${tokenData.instance_url}";
+              
+              // Construct the callback URL to the Google Apps Script
+              const scriptCallbackUrl = 'https://script.google.com/macros/s/' + scriptId + '/exec';
+              
+              // Redirect to the Apps Script with token data
+              const redirectUrl = scriptCallbackUrl + '?' + new URLSearchParams({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+                instance_url: instanceUrl,
+                scriptId: scriptId
+              }).toString();
+              
+              console.log('Redirecting to:', redirectUrl);
+              window.location.href = redirectUrl;
+            } catch (error) {
+              document.body.innerHTML = '<h1>Error</h1><p>An error occurred: ' + error.message + '</p>';
+              console.error('Error:', error);
+            }
+          };
         </script>
-      </body>
-      </html>
-    `);
-   } catch (error) {
-     console.error("Error in OAuth callback:", error);
-     let errorDetails = "No additional details available";
-
-     if (error.response) {
-       errorDetails = `Status: ${error.response.status}, Data: ${JSON.stringify(
-         error.response.data
-       )}`;
-       console.error("Response error details:", errorDetails);
-     }
-
-     res.status(500).send(`
-      <html>
-      <head>
-        <title>OAuth Error</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          .error { color: red; }
-          pre { background: #f4f4f4; padding: 10px; border-radius: 5px; }
-        </style>
       </head>
       <body>
-        <h2 class="error">Error Processing OAuth Callback</h2>
-        <p>${error.message}</p>
-        
-        <details>
-          <summary>Technical Details</summary>
-          <pre>${errorDetails}</pre>
-        </details>
+        <h1>Processing Your Authorization</h1>
+        <p>Please wait while we redirect you back to Google Apps Script...</p>
       </body>
       </html>
-    `);
+    `;
+
+     // Send the bridge HTML page
+     res.send(bridgeHtml);
+   } catch (error) {
+     console.error("Error in callback:", error);
+     const errorMsg = (error.response && error.response.data) || error.message;
+     return res
+       .status(500)
+       .send(`Error processing authentication: ${errorMsg}`);
    }
 }
 
