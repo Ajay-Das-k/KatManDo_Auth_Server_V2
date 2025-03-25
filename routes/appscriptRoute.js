@@ -7,7 +7,7 @@ const appScriptController = require("../controller/appScriptController");
 router.post("/userRegister", appScriptController.userRegister); 
 router.post("/createToken", appScriptController.createAccessToken);
 router.post("/deleteToken", appScriptController.deleteAccessToken);
-router.post("/callback", appScriptController.callbackToken);
+router.get("/callback", appScriptController.callbackToken);
 
 
 module.exports = router;
