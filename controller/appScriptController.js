@@ -176,10 +176,19 @@ const callbackToken = async (req, res) => {
 
     // Extract scriptId from state if needed
     let scriptId = "";
-    if (state && state.includes("scriptId")) {
+    let email = "";
+
+    if (state) {
+      // Extract scriptId
       const scriptIdMatch = state.match(/scriptId=([^&]+)/i);
       if (scriptIdMatch && scriptIdMatch[1]) {
         scriptId = decodeURIComponent(scriptIdMatch[1]);
+      }
+
+      // Extract email
+      const emailMatch = state.match(/email=([^&]+)/i);
+      if (emailMatch && emailMatch[1]) {
+        email = decodeURIComponent(emailMatch[1]);
       }
     }
 
@@ -201,11 +210,12 @@ const callbackToken = async (req, res) => {
 
     const tokenData = tokenResponse.data;
 
-    // Explicitly log access token, refresh token, and instance URL
+    // Explicitly log access token, refresh token, instance URL, script ID, and email
     console.log("Access Token:", tokenData.access_token);
     console.log("Refresh Token:", tokenData.refresh_token);
     console.log("Instance URL:", tokenData.instance_url);
     console.log("Script ID:", scriptId);
+    console.log("User Email:", email);
 
     // Send a simple success response
     res.send(`
