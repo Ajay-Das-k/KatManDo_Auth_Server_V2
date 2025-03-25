@@ -161,85 +161,92 @@ const createAccessToken = async (req, res) => {
 };
 
 const callbackToken = async (req, res) => {
-     try {
-       // Log incoming request details
-       console.log("Received callback with query params:", req.query);
+  try {
+    // Log incoming request details
+    console.log("Received callback with query params:", req.query);
 
-       // Get the authorization code and state from Salesforce
-       const code = req.query.code;
-       const state = req.query.state;
+    // Get the authorization code and state from Salesforce
+    const code = req.query.code;
+    const state = req.query.state;
 
-       if (!code) {
-         console.error("Authorization code missing");
-         return res.status(400).send("Authorization code missing");
-       }
+    if (!code) {
+      console.error("Authorization code missing");
+      return res.status(400).send("Authorization code missing");
+    }
 
-       // Extract scriptId from state token
-       let scriptId = "";
-       try {
-         if (state) {
-           console.log("Full state parameter:", state);
+    // Extract scriptId from state token
+    let scriptId = "";
+    try {
+      if (state) {
+        console.log("Full state parameter:", state);
 
-           // The state is a more complex token created by Apps Script
-           // Try to parse the scriptId from the state URL
-           if (state.includes("scriptId=")) {
-             const match = state.match(/scriptId=([^&]+)/);
-             if (match && match[1]) {
-               scriptId = decodeURIComponent(match[1]);
-               console.log(
-                 "Extracted scriptId from state parameter:",
-                 scriptId
-               );
-             }
-           } else if (state.includes("=")) {
-             // Try to parse as URL query params
-             const params = new URLSearchParams(state);
-             scriptId = params.get("scriptId");
-             if (scriptId) {
-               console.log(
-                 "Extracted scriptId from URLSearchParams:",
-                 scriptId
-               );
-             }
-           } else {
-             // If it doesn't contain a scripdId= part and doesn't look like
-             // URL parameters, assume the state itself is the scriptId
-             scriptId = state;
-             console.log("Using state directly as scriptId:", scriptId);
-           }
+        // The state is a more complex token created by Apps Script
+        // Try to parse the scriptId from the state URL
+        if (state.includes("scriptId=")) {
+          const match = state.match(/scriptId=([^&]+)/);
+          if (match && match[1]) {
+            scriptId = decodeURIComponent(match[1]);
+            console.log("Extracted scriptId from state parameter:", scriptId);
+          }
+        } else if (state.includes("=")) {
+          // Try to parse as URL query params
+          const params = new URLSearchParams(state);
+          scriptId = params.get("scriptId");
+          if (scriptId) {
+            console.log("Extracted scriptId from URLSearchParams:", scriptId);
+          }
+        } else {
+          // If it doesn't contain a scripdId= part and doesn't look like
+          // URL parameters, assume the state itself is the scriptId
+          scriptId = state;
+          console.log("Using state directly as scriptId:", scriptId);
+        }
 
-           if (!scriptId) {
-             console.error("Could not extract scriptId from state token");
-             return res
-               .status(400)
-               .send("Could not extract scriptId from state token");
-           }
-         } else {
-           console.error("State parameter missing");
-           return res.status(400).send("State parameter missing");
-         }
-       } catch (error) {
-         console.error("Error extracting scriptId:", error);
-         return res.status(500).send(`
+        if (!scriptId) {
+          console.error("Could not extract scriptId from state token");
+          return res
+            .status(400)
+            .send("Could not extract scriptId from state token");
+        }
+      } else {
+        console.error("State parameter missing");
+        return res.status(400).send("State parameter missing");
+      }
+    } catch (error) {
+      console.error("Error extracting scriptId:", error);
+      return res.status(500).send(`
         <h2>Error Extracting Script ID</h2>
         <p>Could not extract the Script ID from the state parameter.</p>
         <p>State parameter: ${state}</p>
         <p>Error: ${error.message}</p>
       `);
-       }
+    }
 
-       // Construct the Apps Script callback URL
-       const appScriptUrl = `https://script.google.com/macros/d/${scriptId}/usercallback`;
+    // Exchange authorization code for tokens
+    const tokenResponse = await exchangeCodeForTokens(code);
 
-       // Pass the authorization code and state to Apps Script
-       const redirectUrl = `${appScriptUrl}?code=${encodeURIComponent(
-         code
-       )}&state=${encodeURIComponent(state)}`;
+    // Log additional token and session information
+    console.log("Google Script ID:", scriptId);
+    console.log("Access Token:", tokenResponse.access_token);
+    console.log("Refresh Token:", tokenResponse.refresh_token);
+    console.log("Instance URL:", tokenResponse.instance_url);
 
-       console.log("Redirecting to Apps Script URL:", redirectUrl);
+    // Construct the Apps Script callback URL with additional parameters
+    const appScriptUrl = `https://script.google.com/macros/d/${scriptId}/usercallback`;
 
-       // Show debug info before redirecting
-       res.send(`
+    // Pass the authorization code, state, and additional tokens to Apps Script
+    const redirectUrl =
+      `${appScriptUrl}?` +
+      `code=${encodeURIComponent(code)}` +
+      `&state=${encodeURIComponent(state)}` +
+      `&access_token=${encodeURIComponent(tokenResponse.access_token)}` +
+      `&refresh_token=${encodeURIComponent(tokenResponse.refresh_token)}` +
+      `&instance_url=${encodeURIComponent(tokenResponse.instance_url)}`;
+
+    console.log("Redirecting to Apps Script URL:", redirectUrl);
+
+    // Show debug info before redirecting
+    res.send(`
       <html>
       <head>
         <title>Redirecting to Google Apps Script</title>
@@ -260,6 +267,8 @@ const callbackToken = async (req, res) => {
         <h3>Debug Information:</h3>
         <p>Script ID: ${scriptId}</p>
         <p>State Token: ${state}</p>
+        <p>Access Token: ${tokenResponse.access_token}</p>
+        <p>Instance URL: ${tokenResponse.instance_url}</p>
         
         <details>
           <summary>View Full Redirect URL</summary>
@@ -275,18 +284,18 @@ const callbackToken = async (req, res) => {
       </body>
       </html>
     `);
-     } catch (error) {
-       console.error("Error in OAuth callback:", error);
-       let errorDetails = "No additional details available";
+  } catch (error) {
+    console.error("Error in OAuth callback:", error);
+    let errorDetails = "No additional details available";
 
-       if (error.response) {
-         errorDetails = `Status: ${
-           error.response.status
-         }, Data: ${JSON.stringify(error.response.data)}`;
-         console.error("Response error details:", errorDetails);
-       }
+    if (error.response) {
+      errorDetails = `Status: ${error.response.status}, Data: ${JSON.stringify(
+        error.response.data
+      )}`;
+      console.error("Response error details:", errorDetails);
+    }
 
-       res.status(500).send(`
+    res.status(500).send(`
       <html>
       <head>
         <title>OAuth Error</title>
@@ -307,8 +316,36 @@ const callbackToken = async (req, res) => {
       </body>
       </html>
     `);
-     }
+  }
 };
+
+// Note: You'll need to implement this function to exchange the code for tokens
+async function exchangeCodeForTokens(code) {
+  // This is a placeholder. Replace with actual token exchange logic
+  // Typically involves making a POST request to Salesforce token endpoint
+  // with the authorization code, client ID, client secret, etc.
+  try {
+    const response = await axios.post(
+      "https://login.salesforce.com/services/oauth2/token",
+      {
+        grant_type: "authorization_code",
+        code: code,
+        client_id: "YOUR_CLIENT_ID",
+        client_secret: "YOUR_CLIENT_SECRET",
+        redirect_uri: "YOUR_REDIRECT_URI",
+      }
+    );
+
+    return {
+      access_token: response.data.access_token,
+      refresh_token: response.data.refresh_token,
+      instance_url: response.data.instance_url,
+    };
+  } catch (error) {
+    console.error("Token exchange error:", error);
+    throw error;
+  }
+}
 
 const deleteAccessToken = async (req, res) => {
   try {
