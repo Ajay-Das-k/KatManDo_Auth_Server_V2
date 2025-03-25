@@ -223,40 +223,41 @@ const callbackToken = async (req, res) => {
 
     // Send the HTML bridge with debug information
     res.send(`
-      <html>
-      <head>
-        <title>Redirecting to Google Apps Script</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          pre { background: #f4f4f4; padding: 10px; border-radius: 5px; }
-          .success { color: green; }
-          button { padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        </style>
-      </head>
-      <body>
-        <h2>Authentication Successful!</h2>
-        <p class="success">✓ Ready to connect to Google Apps Script</p>
-        <p>Click the button below to continue:</p>
-        
-        <p><button onclick="window.location.href='${redirectUrl}'">Continue to Google Apps Script</button></p>
-        
-        <h3>Debug Information:</h3>
-        <p>Script ID: ${scriptId}</p>
-        
-        <details>
-          <summary>View Full Redirect URL</summary>
-          <pre>${redirectUrl}</pre>
-        </details>
-        
-        <script>
-          // Automatically redirect after 5 seconds
-          setTimeout(function() {
-            window.location.href = '${redirectUrl}';
-          }, 5000);
-        </script>
-      </body>
-      </html>
-    `);
+  <html>
+  <head>
+    <title>Redirecting to Google Apps Script</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      pre { background: #f4f4f4; padding: 10px; border-radius: 5px; }
+      .success { color: green; }
+      button { padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h2>Authentication Successful!</h2>
+    <p class="success">✓ Ready to connect to Google Apps Script</p>
+    <p>Click the button below to close this window:</p>
+    
+    <p><button onclick="window.close()">Close Window</button></p>
+    
+    <h3>Debug Information:</h3>
+    <p>Script ID: ${scriptId}</p>
+    
+    <details>
+      <summary>View Full Redirect URL</summary>
+      <pre>${redirectUrl}</pre>
+    </details>
+    
+    <script>
+      // Optional: Close the window automatically after 5 seconds
+      setTimeout(function() {
+        window.close();
+      }, 5000);
+    </script>
+  </body>
+  </html>
+`);
+
   } catch (error) {
     console.error("Error in callback:", error);
     const errorMsg = (error.response && error.response.data) || error.message;
