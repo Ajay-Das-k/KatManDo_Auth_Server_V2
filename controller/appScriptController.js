@@ -162,6 +162,7 @@ const createAccessToken = async (req, res) => {
 const callbackToken = async (req, res) => {
   try {
     // Get the authorization code and state from the URL
+    console.log("i am here");
     const code = req.query.code;
     const state = req.query.state;
 
