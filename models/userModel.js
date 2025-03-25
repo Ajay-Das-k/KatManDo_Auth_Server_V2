@@ -1,31 +1,40 @@
 const mongoose = require("mongoose");
-const Schema = mongoose.Schema;
 
-// Define the User schema
-const userSchema = new Schema({
-  googleSheetId: {
-    type: String,
-    required: true, // Ensures googleSheetId is provided
-    unique: true, // Ensures googleSheetId is unique in the database
-    trim: true, // Trims any leading/trailing spaces
+const userSchema = new mongoose.Schema(
+  {
+    googleScriptId: {
+      type: String,
+      required: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      lowercase: true,
+      trim: true,
+    },
+    userId: {
+      type: String,
+      unique: true,
+      required: true,
+      index: true,
+    },
   },
-  email: {
-    type: String,
-    required: true, // Ensures email is provided
-    unique: true, // Ensures email is unique in the database
-    lowercase: true, // Automatically convert email to lowercase
-    trim: true, // Trims any leading/trailing spaces
-    match: [/.+\@.+\..+/, "Please fill a valid email address"], // Simple email validation
-  },
+  {
+    timestamps: true,
+    // Add a pre-save middleware to generate userId
+    pre: {
+      save: function (next) {
+        // Generate userId by combining email and googleScriptId
+        if (!this.userId) {
+          this.userId = `${this.email}_${this.googleScriptId}`;
+        }
+        next();
+      },
+    },
+  }
+);
 
-  createdAt: {
-    type: Date,
-    default: Date.now, // Automatically set the current date/time when user is created
-  },
-});
+// Add a unique compound index for email and googleScriptId
+userSchema.index({ email: 1, googleScriptId: 1 }, { unique: true });
 
-// Create a model based on the schema
-const User = mongoose.model("User", userSchema);
-
-// Export the model so it can be used elsewhere in the application
-module.exports = User;
+module.exports = mongoose.model("User", userSchema);

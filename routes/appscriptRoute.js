@@ -3,9 +3,11 @@ const router = express.Router();
 const appScriptController = require("../controller/appScriptController");
 
 // Define routes for AppScript
-router.get("/auth", appScriptController.authenticate); //  route for AppScript authentication
-router.post("/userRegister", appScriptController.userRegister); //  route to send data to AppScript
-router.get("/env-data", appScriptController.environmentData); //  route to send environmentData to AppScript
+
+router.post("/userRegister", appScriptController.userRegister); 
+router.post("/createToken", appScriptController.createAccessToken);
+router.post("/deleteToken", appScriptController.deleteAccessToken);
+router.post("/callback", appScriptController.callbackToken);
 
 
 module.exports = router;
