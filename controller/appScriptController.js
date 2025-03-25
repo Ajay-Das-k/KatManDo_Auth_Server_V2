@@ -161,35 +161,69 @@ const createAccessToken = async (req, res) => {
 };
 
 const callbackToken = async (req, res) => {
-  try {
-    // Extract specific parameters
-    const scriptId = req.query.scriptId || req.body.scriptId;
-    const instanceUrl = req.query.instance_url || req.body.instance_url;
-    const accessToken = req.query.access_token || req.body.access_token;
-    const refreshToken = req.query.refresh_token || req.body.refresh_token;
+try {
+  // Get the authorization code and state from the URL
+  const code = req.query.code;
+  const state = req.query.state;
 
-    // Log the extracted parameters
-    console.log("Extracted Script ID:", scriptId);
-    console.log("Instance URL:", instanceUrl);
-    console.log("Access Token:", accessToken);
-    console.log("Refresh Token:", refreshToken);
-
-    // Send a response with the extracted information
-    res.status(200).json({
-      status: "success",
-      scriptId: scriptId,
-      instanceUrl: instanceUrl,
-      accessTokenPresent: !!accessToken,
-      refreshTokenPresent: !!refreshToken,
-    });
-  } catch (error) {
-    console.error("Error in callback processing:", error);
-
-    res.status(500).json({
-      status: "error",
-      message: error.message,
-    });
+  if (!code) {
+    return res.status(400).send("Authorization code is missing");
   }
+
+  console.log("Received code:", code);
+  console.log("Received state:", state);
+
+  // Default script ID (replace with your default if needed)
+  let scriptId = "DEFAULT_SCRIPT_ID";
+  let extractionMethod = "default";
+
+  // Method 1: Look for a scriptId parameter in the state
+  if (state && state.includes("scriptId")) {
+    const scriptIdMatch = state.match(/scriptId=([^&]+)/i);
+    if (scriptIdMatch && scriptIdMatch[1]) {
+      scriptId = decodeURIComponent(scriptIdMatch[1]);
+      extractionMethod = "regex";
+    }
+  }
+
+  // Method 2: If no scriptId found in regex, try direct parsing
+  if (scriptId === "DEFAULT_SCRIPT_ID" && state) {
+    try {
+      const stateParams = new URLSearchParams(state);
+      const extractedScriptId = stateParams.get("scriptId");
+      if (extractedScriptId) {
+        scriptId = decodeURIComponent(extractedScriptId);
+        extractionMethod = "URLSearchParams";
+      }
+    } catch (parseError) {
+      console.error("Error parsing state with URLSearchParams:", parseError);
+    }
+  }
+
+  // Log the script ID and how we got it
+  console.log(
+    `Using script ID: ${scriptId} (extraction method: ${extractionMethod})`
+  );
+
+  // Comprehensive logging of all received query parameters
+  console.log("Full query parameters:", JSON.stringify(req.query, null, 2));
+
+  // Prepare response
+  const responseData = {
+    code: code,
+    state: state,
+    scriptId: scriptId,
+    extractionMethod: extractionMethod,
+  };
+
+  // Send a response (or you can redirect as in your original code)
+  return res.status(200).json(responseData);
+} catch (error) {
+  console.error("Error in callback:", error);
+  const errorMsg = (error.response && error.response.data) || error.message;
+
+  return res.status(500).send(`Error processing authentication: ${errorMsg}`);
+}
 };
 
 
