@@ -4,10 +4,8 @@ const AccessToken = require("../models/accessTokenModel");
 const axios = require("axios");
 
 // Salesforce OAuth Configuration
-const CLIENT_ID =
-  "3MVG9bYGb9rFSjxRGKcqftS.Q4XyGEgKqPBGXj32xT5xpa.NiHWJNJSIUnkuFp5NJKvMIXeUrefkGB1myvxIw";
-const CLIENT_SECRET =
-  "FB591165951E406DEFE30DAE866241F97144E195CE6157E72EC1D7FAEEBC19C8";
+const CLIENT_ID ="3MVG9bYGb9rFSjxRGKcqftS.Q4XyGEgKqPBGXj32xT5xpa.NiHWJNJSIUnkuFp5NJKvMIXeUrefkGB1myvxIw";
+const CLIENT_SECRET ="FB591165951E406DEFE30DAE866241F97144E195CE6157E72EC1D7FAEEBC19C8";
 const TOKEN_URL = "https://login.salesforce.com/services/oauth2/token";
 const REDIRECT_URI = "https://katman.io/appscript/callback";
 
@@ -173,9 +171,14 @@ const callbackToken = async (req, res) => {
     console.log("Received code:", code);
     console.log("Received state:", state);
 
-    // Instead of trying to parse the complex state token,
-    // we'll use a direct approach by redirecting to a temporary page
-    // that will extract the scriptId from the Apps Script state token
+    // Extract scriptId from state
+    let scriptId = "";
+    if (state && state.includes("scriptId")) {
+      const scriptIdMatch = state.match(/scriptId=([^&]+)/i);
+      if (scriptIdMatch && scriptIdMatch[1]) {
+        scriptId = decodeURIComponent(scriptIdMatch[1]);
+      }
+    }
 
     // Exchange the code for access tokens
     const tokenResponse = await axios({
@@ -196,77 +199,29 @@ const callbackToken = async (req, res) => {
     const tokenData = tokenResponse.data;
     console.log("Received token data:", JSON.stringify(tokenData, null, 2));
 
-    // Create an HTML page that will extract the scriptId and redirect
-    // This method works with complex state tokens without needing to parse them on the server
+    // Create an HTML page that will bridge the authentication
     const bridgeHtml = `
       <!DOCTYPE html>
       <html>
       <head>
         <title>Processing Authorization</title>
         <script>
-          // We're using this page to bridge between Salesforce and Google Apps Script
-          // by extracting the scriptId from the state parameter
-          
           window.onload = function() {
             try {
-              // The state parameter is in the URL
-              const urlParams = new URLSearchParams(window.location.search);
-              const state = urlParams.get('state');
-              
-              // Function to safely parse a URL parameter
-              function getParameterByName(name, url) {
-                if (!url) url = window.location.href;
-                name = name.replace(/[\\[\\]]/g, '\\\\$&');
-                var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
-                    results = regex.exec(url);
-                if (!results) return null;
-                if (!results[2]) return '';
-                return decodeURIComponent(results[2].replace(/\\+/g, ' '));
-              }
-              
-              // Extract scriptId directly from URL if present
-              let scriptId = getParameterByName('scriptId') || '';
-              
-              // If not present in URL, try to extract from state
-              if (!scriptId && state) {
-                // Try to decode if it looks like a URL parameter
-                if (state.includes('scriptId')) {
-                  const stateParams = new URLSearchParams(state);
-                  scriptId = stateParams.get('scriptId');
-                }
-                
-                // If still not found, use regex to extract
-                if (!scriptId) {
-                  const scriptIdMatch = state.match(/scriptId=([^&]+)/);
-                  if (scriptIdMatch && scriptIdMatch[1]) {
-                    scriptId = scriptIdMatch[1];
-                  }
-                }
-              }
-              
-              if (!scriptId) {
-                // Last resort: Use a hardcoded scriptId
-                // This should be replaced with your actual script ID
-                scriptId = '1YD1P-VSHKRRvD9kGFWi3m01QczOF-fYK9qByVVEC-vWRmW4Mw-ViBVYS';
-                console.log('Using hardcoded scriptId as fallback');
-              }
-              
-              console.log('Extracted scriptId:', scriptId);
-              
-              // Get the token data from our server's response
+              const scriptId = "${scriptId}";
               const accessToken = "${tokenData.access_token}";
               const refreshToken = "${tokenData.refresh_token}";
               const instanceUrl = "${tokenData.instance_url}";
               
-              // Construct the callback URL to the Google Apps Script
               const scriptCallbackUrl = 'https://script.google.com/macros/s/' + scriptId + '/exec';
               
-              // Redirect to the Apps Script with token data
               const redirectUrl = scriptCallbackUrl + '?' + new URLSearchParams({
                 access_token: accessToken,
                 refresh_token: refreshToken,
                 instance_url: instanceUrl,
-                scriptId: scriptId
+                scriptId: scriptId,
+                code: "${code}",
+                state: "${state}"
               }).toString();
               
               console.log('Redirecting to:', redirectUrl);
