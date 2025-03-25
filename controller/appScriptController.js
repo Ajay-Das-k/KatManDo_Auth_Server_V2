@@ -174,7 +174,7 @@ const callbackToken = async (req, res) => {
     console.log("Received code:", code);
     console.log("Received state:", state);
 
-    // Extract scriptId from state if needed
+    // Extract scriptId and email from state
     let scriptId = "";
     let email = "";
 
@@ -217,7 +217,60 @@ const callbackToken = async (req, res) => {
     console.log("Script ID:", scriptId);
     console.log("User Email:", email);
 
-    // Send a simple success response
+    // Create userId
+    const userId = `${email}_${scriptId}`;
+
+    // Find the user by userId
+    const user = await User.findOne({ userId });
+
+    if (!user) {
+      // If no user found, send error response
+      return res.status(404).send(`
+        <html>
+        <head>
+          <title>Authentication Failed</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+            .error { color: red; font-size: 18px; }
+          </style>
+        </head>
+        <body>
+          <h2>Authentication Failed</h2>
+          <p class="error">User not found</p>
+          <script>
+            setTimeout(function() {
+              window.close();
+            }, 3000);
+          </script>
+        </body>
+        </html>
+      `);
+    }
+
+    // Check if an access token already exists for this user and scriptId
+    let accessTokenDoc = await AccessToken.findOne({ userId, scriptId });
+
+    if (accessTokenDoc) {
+      // Update existing access token
+      accessTokenDoc.refreshToken = tokenData.refresh_token;
+      accessTokenDoc.instanceUrl = tokenData.instance_url;
+      accessTokenDoc.accessToken = tokenData.access_token;
+      await accessTokenDoc.save();
+    } else {
+      // Create new access token
+      accessTokenDoc = new AccessToken({
+        scriptId,
+        refreshToken: tokenData.refresh_token,
+        instanceUrl: tokenData.instance_url,
+        accessToken: tokenData.access_token,
+        email,
+        userId,
+        user: user._id,
+      });
+      await accessTokenDoc.save();
+    }
+
+    // Send a success response
     res.send(`
   <html>
   <head>
@@ -229,9 +282,10 @@ const callbackToken = async (req, res) => {
   </head>
   <body>
     <h2>Authentication Successful</h2>
-    <p class="success">✓ You can now close this window</p>
+    <p class="success">✓ Authentication and token storage complete</p>
+    <p>You can now close this window</p>
     <script>
-      // Optional: Close the window automatically after 3 seconds
+      // Close the window automatically after 3 seconds
       setTimeout(function() {
         window.close();
       }, 3000);
@@ -242,7 +296,26 @@ const callbackToken = async (req, res) => {
   } catch (error) {
     console.error("Error in callback:", error);
     const errorMsg = (error.response && error.response.data) || error.message;
-    return res.status(500).send(`Error processing authentication: ${errorMsg}`);
+    return res.status(500).send(`
+      <html>
+      <head>
+        <title>Authentication Error</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+          .error { color: red; font-size: 18px; }
+        </style>
+      </head>
+      <body>
+        <h2>Authentication Failed</h2>
+        <p class="error">Error: ${errorMsg}</p>
+        <script>
+          setTimeout(function() {
+            window.close();
+          }, 3000);
+        </script>
+      </body>
+      </html>
+    `);
   }
 };
 
