@@ -161,79 +161,85 @@ const createAccessToken = async (req, res) => {
 };
 
 const callbackToken = async (req, res) => {
-   try {
-     // Log incoming request details
-     console.log("Received callback with query params:", req.query);
-
-     // Get the authorization code and state from Salesforce
-     const code = req.query.code;
-     const state = req.query.state;
-
-     if (!code) {
-       console.error("Authorization code missing");
-       return res.status(400).send("Authorization code missing");
-     }
-
-     // Extract scriptId from state token
-     let scriptId = "";
      try {
-       if (state) {
-         console.log("Full state parameter:", state);
+       // Log incoming request details
+       console.log("Received callback with query params:", req.query);
 
-         // The state is a more complex token created by Apps Script
-         // Try to parse the scriptId from the state URL
-         if (state.includes("scriptId=")) {
-           const match = state.match(/scriptId=([^&]+)/);
-           if (match && match[1]) {
-             scriptId = decodeURIComponent(match[1]);
-             console.log("Extracted scriptId from state parameter:", scriptId);
+       // Get the authorization code and state from Salesforce
+       const code = req.query.code;
+       const state = req.query.state;
+
+       if (!code) {
+         console.error("Authorization code missing");
+         return res.status(400).send("Authorization code missing");
+       }
+
+       // Extract scriptId from state token
+       let scriptId = "";
+       try {
+         if (state) {
+           console.log("Full state parameter:", state);
+
+           // The state is a more complex token created by Apps Script
+           // Try to parse the scriptId from the state URL
+           if (state.includes("scriptId=")) {
+             const match = state.match(/scriptId=([^&]+)/);
+             if (match && match[1]) {
+               scriptId = decodeURIComponent(match[1]);
+               console.log(
+                 "Extracted scriptId from state parameter:",
+                 scriptId
+               );
+             }
+           } else if (state.includes("=")) {
+             // Try to parse as URL query params
+             const params = new URLSearchParams(state);
+             scriptId = params.get("scriptId");
+             if (scriptId) {
+               console.log(
+                 "Extracted scriptId from URLSearchParams:",
+                 scriptId
+               );
+             }
+           } else {
+             // If it doesn't contain a scripdId= part and doesn't look like
+             // URL parameters, assume the state itself is the scriptId
+             scriptId = state;
+             console.log("Using state directly as scriptId:", scriptId);
            }
-         } else if (state.includes("=")) {
-           // Try to parse as URL query params
-           const params = new URLSearchParams(state);
-           scriptId = params.get("scriptId");
-           if (scriptId) {
-             console.log("Extracted scriptId from URLSearchParams:", scriptId);
+
+           if (!scriptId) {
+             console.error("Could not extract scriptId from state token");
+             return res
+               .status(400)
+               .send("Could not extract scriptId from state token");
            }
          } else {
-           // If it doesn't contain a scripdId= part and doesn't look like
-           // URL parameters, assume the state itself is the scriptId
-           scriptId = state;
-           console.log("Using state directly as scriptId:", scriptId);
+           console.error("State parameter missing");
+           return res.status(400).send("State parameter missing");
          }
-
-         if (!scriptId) {
-           console.error("Could not extract scriptId from state token");
-           return res
-             .status(400)
-             .send("Could not extract scriptId from state token");
-         }
-       } else {
-         console.error("State parameter missing");
-         return res.status(400).send("State parameter missing");
-       }
-     } catch (error) {
-       console.error("Error extracting scriptId:", error);
-       return res.status(500).send(`
+       } catch (error) {
+         console.error("Error extracting scriptId:", error);
+         return res.status(500).send(`
         <h2>Error Extracting Script ID</h2>
         <p>Could not extract the Script ID from the state parameter.</p>
         <p>State parameter: ${state}</p>
         <p>Error: ${error.message}</p>
       `);
-     }
+       }
 
-     // Construct the Apps Script callback URL
-     const appScriptUrl = `https://script.google.com/macros/d/${scriptId}/usercallback`;
+       // Construct the Apps Script callback URL
+       const appScriptUrl = `https://script.google.com/macros/d/${scriptId}/usercallback`;
 
-     // Pass the authorization code and state to Apps Script
-     const redirectUrl = `${appScriptUrl}?code=${encodeURIComponent(
-       code
-     )}&state=${encodeURIComponent(state)}`;
+       // Pass the authorization code and state to Apps Script
+       const redirectUrl = `${appScriptUrl}?code=${encodeURIComponent(
+         code
+       )}&state=${encodeURIComponent(state)}`;
 
-     console.log("Redirecting to Apps Script URL:", redirectUrl);
+       console.log("Redirecting to Apps Script URL:", redirectUrl);
 
-     // Show debug info before redirecting
-     res.send(`
+       // Show debug info before redirecting
+       res.send(`
       <html>
       <head>
         <title>Redirecting to Google Apps Script</title>
@@ -269,18 +275,18 @@ const callbackToken = async (req, res) => {
       </body>
       </html>
     `);
-   } catch (error) {
-     console.error("Error in OAuth callback:", error);
-     let errorDetails = "No additional details available";
+     } catch (error) {
+       console.error("Error in OAuth callback:", error);
+       let errorDetails = "No additional details available";
 
-     if (error.response) {
-       errorDetails = `Status: ${error.response.status}, Data: ${JSON.stringify(
-         error.response.data
-       )}`;
-       console.error("Response error details:", errorDetails);
-     }
+       if (error.response) {
+         errorDetails = `Status: ${
+           error.response.status
+         }, Data: ${JSON.stringify(error.response.data)}`;
+         console.error("Response error details:", errorDetails);
+       }
 
-     res.status(500).send(`
+       res.status(500).send(`
       <html>
       <head>
         <title>OAuth Error</title>
@@ -301,7 +307,7 @@ const callbackToken = async (req, res) => {
       </body>
       </html>
     `);
-   }
+     }
 };
 
 const deleteAccessToken = async (req, res) => {
