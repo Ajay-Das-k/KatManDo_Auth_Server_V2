@@ -1,3 +1,5 @@
+// the ajay is great
+
 const asyncHandler = require("express-async-handler");
 const User = require("../models/userModel");
 const AccessToken = require("../models/accessTokenModel");
@@ -162,7 +164,6 @@ const createAccessToken = async (req, res) => {
 const callbackToken = async (req, res) => {
   try {
     // Get the authorization code and state from the URL
-    console.log("i am here");
     const code = req.query.code;
     const state = req.query.state;
 
@@ -206,55 +207,63 @@ const callbackToken = async (req, res) => {
     console.log("Instance URL:", tokenData.instance_url);
     console.log("Script ID:", scriptId);
 
-    // Create an HTML page that will bridge the authentication
-    const bridgeHtml = `
-      <!DOCTYPE html>
+    // Construct the redirect URL
+    const scriptCallbackUrl = `https://script.google.com/macros/s/${scriptId}/exec`;
+    const redirectUrl =
+      scriptCallbackUrl +
+      "?" +
+      new URLSearchParams({
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+        instance_url: tokenData.instance_url,
+        scriptId: scriptId,
+        code: code,
+        state: state,
+      }).toString();
+
+    // Send the HTML bridge with debug information
+    res.send(`
       <html>
       <head>
-        <title>Processing Authorization</title>
-        <script>
-          window.onload = function() {
-            try {
-              const scriptId = "${scriptId}";
-              const accessToken = "${tokenData.access_token}";
-              const refreshToken = "${tokenData.refresh_token}";
-              const instanceUrl = "${tokenData.instance_url}";
-              
-              const scriptCallbackUrl = 'https://script.google.com/macros/s/' + scriptId + '/exec';
-              
-              const redirectUrl = scriptCallbackUrl + '?' + new URLSearchParams({
-                access_token: accessToken,
-                refresh_token: refreshToken,
-                instance_url: instanceUrl,
-                scriptId: scriptId,
-                code: "${code}",
-                state: "${state}"
-              }).toString();
-              
-              console.log('Redirecting to:', redirectUrl);
-              window.location.href = redirectUrl;
-            } catch (error) {
-              document.body.innerHTML = '<h1>Error</h1><p>An error occurred: ' + error.message + '</p>';
-              console.error('Error:', error);
-            }
-          };
-        </script>
+        <title>Redirecting to Google Apps Script</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          pre { background: #f4f4f4; padding: 10px; border-radius: 5px; }
+          .success { color: green; }
+          button { padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        </style>
       </head>
       <body>
-        <h1>Processing Your Authorization</h1>
-        <p>Please wait while we redirect you back to Google Apps Script...</p>
+        <h2>Authentication Successful!</h2>
+        <p class="success">✓ Ready to connect to Google Apps Script</p>
+        <p>Click the button below to continue:</p>
+        
+        <p><button onclick="window.location.href='${redirectUrl}'">Continue to Google Apps Script</button></p>
+        
+        <h3>Debug Information:</h3>
+        <p>Script ID: ${scriptId}</p>
+        
+        <details>
+          <summary>View Full Redirect URL</summary>
+          <pre>${redirectUrl}</pre>
+        </details>
+        
+        <script>
+          // Automatically redirect after 5 seconds
+          setTimeout(function() {
+            window.location.href = '${redirectUrl}';
+          }, 5000);
+        </script>
       </body>
       </html>
-    `;
-
-    // Send the bridge HTML page
-    res.send(bridgeHtml);
+    `);
   } catch (error) {
     console.error("Error in callback:", error);
     const errorMsg = (error.response && error.response.data) || error.message;
     return res.status(500).send(`Error processing authentication: ${errorMsg}`);
   }
 };
+
 
 const deleteAccessToken = async (req, res) => {
   try {
