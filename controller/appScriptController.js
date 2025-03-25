@@ -174,7 +174,7 @@ const callbackToken = async (req, res) => {
     console.log("Received code:", code);
     console.log("Received state:", state);
 
-    // Extract scriptId from state
+    // Extract scriptId from state if needed
     let scriptId = "";
     if (state && state.includes("scriptId")) {
       const scriptIdMatch = state.match(/scriptId=([^&]+)/i);
@@ -207,63 +207,36 @@ const callbackToken = async (req, res) => {
     console.log("Instance URL:", tokenData.instance_url);
     console.log("Script ID:", scriptId);
 
-    // Construct the redirect URL
-    const scriptCallbackUrl = `https://script.google.com/macros/s/${scriptId}/exec`;
-    const redirectUrl =
-      scriptCallbackUrl +
-      "?" +
-      new URLSearchParams({
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        instance_url: tokenData.instance_url,
-        scriptId: scriptId,
-        code: code,
-        state: state,
-      }).toString();
-
-    // Send the HTML bridge with debug information
+    // Send a simple success response
     res.send(`
   <html>
   <head>
-    <title>Redirecting to Google Apps Script</title>
+    <title>Authentication Successful</title>
     <style>
-      body { font-family: Arial, sans-serif; margin: 20px; }
-      pre { background: #f4f4f4; padding: 10px; border-radius: 5px; }
-      .success { color: green; }
-      button { padding: 10px; background: #4285f4; color: white; border: none; border-radius: 5px; cursor: pointer; }
+      body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+      .success { color: green; font-size: 18px; }
     </style>
   </head>
   <body>
-    <h2>Authentication Successful!</h2>
-    <p class="success">✓ Ready to connect to Google Apps Script</p>
-    <p>Click the button below to close this window:</p>
-    
-    <p><button onclick="window.close()">Close Window</button></p>
-    
-    <h3>Debug Information:</h3>
-    <p>Script ID: ${scriptId}</p>
-    
-    <details>
-      <summary>View Full Redirect URL</summary>
-      <pre>${redirectUrl}</pre>
-    </details>
-    
+    <h2>Authentication Successful</h2>
+    <p class="success">✓ You can now close this window</p>
     <script>
-      // Optional: Close the window automatically after 5 seconds
+      // Optional: Close the window automatically after 3 seconds
       setTimeout(function() {
         window.close();
-      }, 5000);
+      }, 3000);
     </script>
   </body>
   </html>
 `);
-
   } catch (error) {
     console.error("Error in callback:", error);
     const errorMsg = (error.response && error.response.data) || error.message;
     return res.status(500).send(`Error processing authentication: ${errorMsg}`);
   }
 };
+
+export default callbackToken;
 
 
 const deleteAccessToken = async (req, res) => {
