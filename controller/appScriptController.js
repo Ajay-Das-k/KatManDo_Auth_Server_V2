@@ -319,9 +319,6 @@ const callbackToken = async (req, res) => {
   }
 };
 
-
-
-
 const deleteAccessToken = async (req, res) => {
   try {
     const { email, googleScriptId } = req.body;
@@ -370,12 +367,48 @@ const deleteAccessToken = async (req, res) => {
   }
 };
 
+const getAccessTokens = async (req, res) => {
+  try {
+    const { email, googleScriptId } = req.query;
 
+    // Validate input
+    if (!email || !googleScriptId) {
+      return res.status(400).json({
+        message: "Email and Google Script ID are required",
+      });
+    }
 
+    // Create userId
+    const userId = `${email}_${googleScriptId}`;
 
-(module.exports = {
+    // Find access tokens for the user
+    const accessTokens = await AccessToken.find({
+      userId: userId,
+    }).select("-__v"); // Exclude version key
+
+    // If no access tokens found
+    if (!accessTokens || accessTokens.length === 0) {
+      return res.status(404).json({
+        message: "No access tokens found for this user",
+      });
+    }
+
+    // Return access tokens
+    res.status(200).json({
+      message: "Access tokens retrieved successfully",
+      accessTokens: accessTokens,
+    });
+  } catch (error) {
+    console.error("Error retrieving access tokens:", error);
+    res.status(500).json({
+      message: "Server error while retrieving access tokens",
+    });
+  }
+};
+module.exports = {
   userRegister,
   createAccessToken,
   deleteAccessToken,
   callbackToken,
-});
+  getAccessTokens
+};

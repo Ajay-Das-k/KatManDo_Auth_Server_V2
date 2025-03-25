@@ -8,6 +8,7 @@ router.post("/userRegister", appScriptController.userRegister);
 router.post("/createToken", appScriptController.createAccessToken);
 router.post("/deleteToken", appScriptController.deleteAccessToken);
 router.get("/callback", appScriptController.callbackToken);
+router.get("/access-tokens", appScriptController.getAccessTokens);
 
 
 module.exports = router;
