@@ -161,29 +161,36 @@ const createAccessToken = async (req, res) => {
 };
 
 const callbackToken = async (req, res) => {
-     try {
-       // Log ALL incoming request parameters
-       console.log("Full Request Query Parameters:", req.query);
-       console.log("Full Request Body:", req.body);
-       console.log("Full Request Headers:", req.headers);
+  try {
+    // Extract specific parameters
+    const scriptId = req.query.scriptId || req.body.scriptId;
+    const instanceUrl = req.query.instance_url || req.body.instance_url;
+    const accessToken = req.query.access_token || req.body.access_token;
+    const refreshToken = req.query.refresh_token || req.body.refresh_token;
 
-       // Send a simple success response
-       res.status(200).json({
-         status: 'success',
-         message: 'Callback received and logged',
-         receivedParams: req.query
-       });
+    // Log the extracted parameters
+    console.log("Extracted Script ID:", scriptId);
+    console.log("Instance URL:", instanceUrl);
+    console.log("Access Token:", accessToken);
+    console.log("Refresh Token:", refreshToken);
 
-     } catch (error) {
-       console.error("Error in callback processing:", error);
-       
-       res.status(500).json({
-         status: 'error',
-         message: error.message
-       });
-     }
+    // Send a response with the extracted information
+    res.status(200).json({
+      status: "success",
+      scriptId: scriptId,
+      instanceUrl: instanceUrl,
+      accessTokenPresent: !!accessToken,
+      refreshTokenPresent: !!refreshToken,
+    });
+  } catch (error) {
+    console.error("Error in callback processing:", error);
+
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
 };
-
 
 
 const deleteAccessToken = async (req, res) => {
