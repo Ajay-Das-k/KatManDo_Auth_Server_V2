@@ -165,37 +165,37 @@ const callbackToken = async (req, res) => {
     // Get the authorization code and state from the URL
     const code = req.query.code;
     const state = req.query.state;
-    
+
     if (!code) {
-      return res.status(400).send('Authorization code is missing');
+      return res.status(400).send("Authorization code is missing");
     }
-    
-    console.log('Received code:', code);
-    console.log('Received state:', state);
-    
+
+    console.log("Received code:", code);
+    console.log("Received state:", state);
+
     // Instead of trying to parse the complex state token,
     // we'll use a direct approach by redirecting to a temporary page
     // that will extract the scriptId from the Apps Script state token
-    
+
     // Exchange the code for access tokens
     const tokenResponse = await axios({
-      method: 'post',
+      method: "post",
       url: TOKEN_URL,
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        "Content-Type": "application/x-www-form-urlencoded",
       },
       data: new URLSearchParams({
-        grant_type: 'authorization_code',
+        grant_type: "authorization_code",
         code: code,
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
-        redirect_uri: REDIRECT_URI
-      }).toString()
+        redirect_uri: REDIRECT_URI,
+      }).toString(),
     });
-    
+
     const tokenData = tokenResponse.data;
-    console.log('Received token data:', JSON.stringify(tokenData, null, 2));
-    
+    console.log("Received token data:", JSON.stringify(tokenData, null, 2));
+
     // Create an HTML page that will extract the scriptId and redirect
     // This method works with complex state tokens without needing to parse them on the server
     const bridgeHtml = `
@@ -284,12 +284,11 @@ const callbackToken = async (req, res) => {
       </body>
       </html>
     `;
-    
+
     // Send the bridge HTML page
     res.send(bridgeHtml);
-    
   } catch (error) {
-    console.error('Error in callback:', error);
+    console.error("Error in callback:", error);
     const errorMsg = (error.response && error.response.data) || error.message;
     return res.status(500).send(`Error processing authentication: ${errorMsg}`);
   }
