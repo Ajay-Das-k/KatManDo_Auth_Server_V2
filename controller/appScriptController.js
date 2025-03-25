@@ -236,7 +236,7 @@ const callbackToken = async (req, res) => {
   }
 };
 
-export default callbackToken;
+
 
 
 const deleteAccessToken = async (req, res) => {
