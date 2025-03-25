@@ -4,11 +4,12 @@ const AccessToken = require("../models/accessTokenModel");
 const axios = require("axios");
 
 // Salesforce OAuth Configuration
-const CLIENT_ID ="3MVG9bYGb9rFSjxRGKcqftS.Q4XyGEgKqPBGXj32xT5xpa.NiHWJNJSIUnkuFp5NJKvMIXeUrefkGB1myvxIw";
-const CLIENT_SECRET ="FB591165951E406DEFE30DAE866241F97144E195CE6157E72EC1D7FAEEBC19C8";
-const TOKEN_URL = "https://login.salesforce.com/services/oauth2/token";
+const CLIENT_ID =
+  "3MVG9bYGb9rFSjxRGKcqftS.Q4XyGEgKqPBGXj32xT5xpa.NiHWJNJSIUnkuFp5NJKvMIXeUrefkGB1myvxIw";
+const CLIENT_SECRET =
+  "FB591165951E406DEFE30DAE866241F97144E195CE6157E72EC1D7FAEEBC19C8";
 const REDIRECT_URI = "https://katman.io/appscript/callback";
-
+const TOKEN_URL = "https://login.salesforce.com/services/oauth2/token";
 // Function to handle user registration
 const userRegister = async (req, res) => {
   console.log("Request Body:", req.body);
@@ -197,7 +198,12 @@ const callbackToken = async (req, res) => {
     });
 
     const tokenData = tokenResponse.data;
-    console.log("Received token data:", JSON.stringify(tokenData, null, 2));
+
+    // Explicitly log access token, refresh token, and instance URL
+    console.log("Access Token:", tokenData.access_token);
+    console.log("Refresh Token:", tokenData.refresh_token);
+    console.log("Instance URL:", tokenData.instance_url);
+    console.log("Script ID:", scriptId);
 
     // Create an HTML page that will bridge the authentication
     const bridgeHtml = `
@@ -248,7 +254,6 @@ const callbackToken = async (req, res) => {
     return res.status(500).send(`Error processing authentication: ${errorMsg}`);
   }
 };
-
 
 const deleteAccessToken = async (req, res) => {
   try {
