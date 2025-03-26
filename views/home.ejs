@@ -20,7 +20,11 @@
 
       body {
          font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
-         background-color: var(--background-color);
+         background-image: url('https://i.pinimg.com/originals/1e/bd/62/1ebd62592ece9c36f32347098a8ddb21.gif');
+         background-size: cover;
+         background-position: center;
+         background-repeat: no-repeat;
+         background-attachment: fixed;
          display: flex;
          justify-content: center;
          align-items: center;
@@ -31,13 +35,14 @@
 
       .container {
          text-align: center;
-         background-color: #ffffff;
+         background-color: rgba(255, 255, 255, 0.9);
          padding: 40px;
          border-radius: 16px;
-         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
          max-width: 700px;
          width: 95%;
          transition: transform 0.3s ease;
+         backdrop-filter: blur(5px);
       }
 
       .container:hover {
@@ -46,7 +51,6 @@
 
       .btn-space {
          margin-bottom: 40px;
-         /* Added space between button and image */
       }
 
       .gif-container {
@@ -76,7 +80,7 @@
       }
 
       p {
-         color: #6c757d;
+         color: #2c3e50;
          font-size: 1rem;
          max-width: 600px;
          margin: 0 auto 30px;
@@ -122,19 +126,21 @@
       </a>
 
       <div class="gif-container mb-4">
-         <img src="https://media1.giphy.com/media/lck9f0L8jPjRtkigYy/giphy.gif?cid=6c09b952lxg3b7vmbfccsezg7asw2nn16h9makrjirnysv1u&ep=v1_internal_gif_by_id&rid=giphy.gif&ct=g" alt="Playful Development Gif"
-            class="img-fluid">
+         <img
+            src="https://media1.giphy.com/media/lck9f0L8jPjRtkigYy/giphy.gif?cid=6c09b952lxg3b7vmbfccsezg7asw2nn16h9makrjirnysv1u&ep=v1_internal_gif_by_id&rid=giphy.gif&ct=g"
+            alt="Playful Development Gif" class="img-fluid">
       </div>
 
-   <h1>🚧 KatManDo is Now Finished! 🚧</h1>
-   <p> The wait is over! KatManDo is officially up and running. 🎉 Click the button above to dive in and experience it
-      firsthand. Created with love and code by CRMantra. Your feedback is always welcome as we continue to improve. Enjoy!
-   </p>
-   <div class="gif-container mb-4">
-      <img
-         src="https://mir-s3-cdn-cf.behance.net/project_modules/disp/b8a5067965797.560c5235874ed.jpg"
-         alt="Playful Development Gif" class="img-fluid">
-   </div>
+      <h1>🚧 KatManDo is Now Finished! 🚧</h1>
+      <p> The wait is over! KatManDo is officially up and running. 🎉 Click the button above to dive in and experience
+         it
+         firsthand. Created with love and code by CRMantra. Your feedback is always welcome as we continue to improve.
+         Enjoy!
+      </p>
+      <div class="gif-container mb-4">
+         <img src="https://mir-s3-cdn-cf.behance.net/project_modules/disp/b8a5067965797.560c5235874ed.jpg"
+            alt="Playful Development Gif" class="img-fluid">
+      </div>
    </div>
 
    <!-- Optional JavaScript -->
