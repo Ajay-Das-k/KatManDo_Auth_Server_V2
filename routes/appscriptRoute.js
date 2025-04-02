@@ -9,6 +9,10 @@ router.post("/createToken", appScriptController.createAccessToken);
 router.post("/deleteToken", appScriptController.deleteAccessToken);
 router.get("/callback", appScriptController.callbackToken);
 router.get("/access-tokens", appScriptController.getAccessTokens);
+router.post("/create-version", appScriptController.createVersion);
+router.get("/getAllVersions", appScriptController.getAllVersions);
+router.post("/checkVersion", appScriptController.checkVersion);
+
 
 
 module.exports = router;
