@@ -3,7 +3,7 @@
 const asyncHandler = require("express-async-handler");
 const User = require("../models/userModel");
 const AccessToken = require("../models/accessTokenModel");
-const AppVersion = require("../models/AppVersion");
+const AppVersion = require("../models/appVersion");
 const axios = require("axios");
 
 // Salesforce OAuth Configuration
