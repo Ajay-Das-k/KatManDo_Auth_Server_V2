@@ -34,6 +34,10 @@ const accessTokenSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    lastRefreshed: {
+      type: Date,
+      default: Date.now, // Default to the current time when created
+    },
   },
   {
     timestamps: true,
