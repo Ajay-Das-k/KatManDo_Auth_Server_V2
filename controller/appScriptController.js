@@ -38,14 +38,34 @@ const userRegister = async (req, res) => {
       const tokens = await AccessToken.find({ user: existingUser._id });
 
       if (tokens.length > 0) {
+        // Refresh each token before sending the response
+        const refreshedTokens = [];
+
+        for (const token of tokens) {
+          try {
+            // Call the token refresh function
+            const refreshedToken = await refreshSalesforceToken(token);
+            refreshedTokens.push(refreshedToken);
+          } catch (refreshError) {
+            console.error(
+              `Error refreshing token for ${token._id}:`,
+              refreshError
+            );
+            // Include the original token with an error flag
+            token.refreshFailed = true;
+            token.refreshError = refreshError.message;
+            refreshedTokens.push(token);
+          }
+        }
+
         return res.status(200).json({
-          message: "User already exists. Access tokens found.",
+          message: "User already exists. Access tokens found and refreshed.",
           user: {
             userId: existingUser.userId,
             googleScriptId: existingUser.googleScriptId,
             email: existingUser.email,
           },
-          accessTokens: tokens,
+          accessTokens: refreshedTokens,
         });
       } else {
         return res.status(200).json({
@@ -88,6 +108,57 @@ const userRegister = async (req, res) => {
     }
 
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Helper function to refresh Salesforce token
+const refreshSalesforceToken = async (accessTokenDoc) => {
+  try {
+    // Get refresh token from the document
+    const refreshToken = accessTokenDoc.refreshToken;
+
+    if (!refreshToken) {
+      throw new Error("No refresh token available");
+    }
+
+    // Exchange the refresh token for a new access token
+    const tokenResponse = await axios({
+      method: "post",
+      url: TOKEN_URL,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      data: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+      }).toString(),
+    });
+
+    const tokenData = tokenResponse.data;
+
+    // Update the access token document
+    accessTokenDoc.accessToken = tokenData.access_token;
+    // Salesforce might also return a new refresh token, though not always
+    if (tokenData.refresh_token) {
+      accessTokenDoc.refreshToken = tokenData.refresh_token;
+    }
+    // Update the instance URL if it changed (unlikely but possible)
+    if (tokenData.instance_url) {
+      accessTokenDoc.instanceUrl = tokenData.instance_url;
+    }
+
+    // Update the lastRefreshed timestamp
+    accessTokenDoc.lastRefreshed = new Date();
+
+    // Save the updated document
+    await accessTokenDoc.save();
+
+    return accessTokenDoc;
+  } catch (error) {
+    console.error("Error refreshing Salesforce token:", error);
+    throw error;
   }
 };
 
