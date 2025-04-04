@@ -162,7 +162,6 @@ const refreshSalesforceToken = async (accessTokenDoc) => {
   }
 };
 
-
 const createAccessToken = async (req, res) => {
   try {
     const { scriptId, refreshToken, instanceUrl, accessToken, email } =
@@ -443,62 +442,6 @@ const deleteAccessToken = async (req, res) => {
   }
 };
 
-// Add this new controller method
-const refreshSalesforceToken = async (accessTokenDoc) => {
-  try {
-    // Check if the access token is expired or about to expire
-    // Note: Since Salesforce doesn't provide token expiry in response, we could use a timestamp
-    // to track when it was last refreshed and assume 2-hour expiry (typical for Salesforce)
-    
-    // Get refresh token from the document
-    const refreshToken = accessTokenDoc.refreshToken;
-    
-    if (!refreshToken) {
-      throw new Error('No refresh token available');
-    }
-    
-    // Exchange the refresh token for a new access token
-    const tokenResponse = await axios({
-      method: 'post',
-      url: TOKEN_URL,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      data: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-      }).toString(),
-    });
-    
-    const tokenData = tokenResponse.data;
-    
-    // Update the access token document
-    accessTokenDoc.accessToken = tokenData.access_token;
-    // Salesforce might also return a new refresh token, though not always
-    if (tokenData.refresh_token) {
-      accessTokenDoc.refreshToken = tokenData.refresh_token;
-    }
-    // Update the instance URL if it changed (unlikely but possible)
-    if (tokenData.instance_url) {
-      accessTokenDoc.instanceUrl = tokenData.instance_url;
-    }
-    
-    // Add a timestamp of when this token was refreshed
-    accessTokenDoc.lastRefreshed = new Date();
-    
-    // Save the updated document
-    await accessTokenDoc.save();
-    
-    return accessTokenDoc;
-  } catch (error) {
-    console.error('Error refreshing Salesforce token:', error);
-    throw error;
-  }
-};
-
-// Modify your existing getAccessTokens method to include token refresh
 const getAccessTokens = async (req, res) => {
   try {
     const { email, googleScriptId } = req.query;
@@ -514,49 +457,21 @@ const getAccessTokens = async (req, res) => {
     const userId = `${email}_${googleScriptId}`;
 
     // Find access tokens for the user
-    const accessToken = await AccessToken.findOne({
+    const accessTokens = await AccessToken.find({
       userId: userId,
     }).select("-__v"); // Exclude version key
 
     // If no access tokens found
-    if (!accessToken) {
+    if (!accessTokens || accessTokens.length === 0) {
       return res.status(404).json({
-        message: "No access token found for this user",
+        message: "No access tokens found for this user",
       });
     }
 
-    // Check if the token needs refreshing
-    // You can use a timestamp approach - if token is older than 1 hour 45 minutes, refresh it
-    // (this gives a buffer before the typical 2-hour expiry)
-    const shouldRefresh = !accessToken.lastRefreshed || 
-      (new Date() - new Date(accessToken.lastRefreshed)) > (105 * 60 * 1000); // 105 minutes in milliseconds
-    
-    if (shouldRefresh) {
-      try {
-        // Refresh the token
-        const refreshedToken = await refreshSalesforceToken(accessToken);
-        
-        // Return refreshed token
-        return res.status(200).json({
-          message: "Access token refreshed and retrieved successfully",
-          accessToken: refreshedToken,
-        });
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        // If refresh fails but we still have an old token, return it with a warning
-        return res.status(200).json({
-          message: "Token refresh failed, returning existing token",
-          accessToken: accessToken,
-          refreshFailed: true,
-          error: refreshError.message
-        });
-      }
-    }
-
-    // Return the existing access token if no refresh was needed
+    // Return access tokens
     res.status(200).json({
-      message: "Access token retrieved successfully",
-      accessToken: accessToken,
+      message: "Access tokens retrieved successfully",
+      accessTokens: accessTokens,
     });
   } catch (error) {
     console.error("Error retrieving access tokens:", error);
