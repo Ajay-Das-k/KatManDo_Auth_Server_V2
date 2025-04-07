@@ -1,12 +1,10 @@
+//Ajay is great V1
+
 const asyncHandler = require("express-async-handler");
-const bcrypt = require("bcrypt");
 const User = require("../models/userModel");
 const AccessToken = require("../models/accessTokenModel");
 const AppVersion = require("../models/appVersion");
 const axios = require("axios");
-
-// Number of salt rounds for bcrypt
-const SALT_ROUNDS = 10;
 
 // Salesforce OAuth Configuration
 const CLIENT_ID =
@@ -15,14 +13,10 @@ const CLIENT_SECRET =
   "FB591165951E406DEFE30DAE866241F97144E195CE6157E72EC1D7FAEEBC19C8";
 const REDIRECT_URI = "https://katman.io/appscript/callback";
 const TOKEN_URL = "https://login.salesforce.com/services/oauth2/token";
-
-// Function to encrypt sensitive data
-const encryptData = async (data) => {
-  const salt = await bcrypt.genSalt(SALT_ROUNDS);
-  return bcrypt.hash(data, salt);
-};
-
 // Function to handle user registration
+
+
+
 const userRegister = async (req, res) => {
   console.log("Request Body:", req.body);
 
@@ -35,9 +29,6 @@ const userRegister = async (req, res) => {
   try {
     // Create userId by combining email and googleScriptId
     const userId = `${email}_${googleScriptId}`;
-
-    // Encrypt the userId for extra security
-    const encryptedUserId = await encryptData(userId);
 
     // Check if user exists with the exact combination of email and googleScriptId
     const existingUser = await User.findOne({ email, googleScriptId });
@@ -88,16 +79,11 @@ const userRegister = async (req, res) => {
       }
     }
 
-    // Encrypt the email for security
-    const hashedEmail = await encryptData(email);
-
     // User does not exist, create new one
     const newUser = new User({
       googleScriptId,
       email,
-      hashedEmail, // Store hashed version for sensitive data
-      userId: userId,
-      encryptedUserId, // Store encrypted version for extra security
+      userId: userId, // Explicitly set userId
     });
 
     const savedUser = await newUser.save();
@@ -125,7 +111,7 @@ const userRegister = async (req, res) => {
   }
 };
 
-// Helper function to refresh Salesforce token with encryption
+// Helper function to refresh Salesforce token
 const refreshSalesforceToken = async (accessTokenDoc) => {
   try {
     // Get refresh token from the document
@@ -152,14 +138,12 @@ const refreshSalesforceToken = async (accessTokenDoc) => {
 
     const tokenData = tokenResponse.data;
 
-    // Update the access token document with encrypted tokens
-    accessTokenDoc.accessToken = await encryptData(tokenData.access_token);
-
+    // Update the access token document
+    accessTokenDoc.accessToken = tokenData.access_token;
     // Salesforce might also return a new refresh token, though not always
     if (tokenData.refresh_token) {
-      accessTokenDoc.refreshToken = await encryptData(tokenData.refresh_token);
+      accessTokenDoc.refreshToken = tokenData.refresh_token;
     }
-
     // Update the instance URL if it changed (unlikely but possible)
     if (tokenData.instance_url) {
       accessTokenDoc.instanceUrl = tokenData.instance_url;
@@ -207,15 +191,11 @@ const createAccessToken = async (req, res) => {
       scriptId,
     });
 
-    // Encrypt sensitive token data
-    const encryptedRefreshToken = await encryptData(refreshToken);
-    const encryptedAccessToken = await encryptData(accessToken);
-
     if (existingAccessToken) {
-      // Update existing access token with encrypted values
-      existingAccessToken.refreshToken = encryptedRefreshToken;
+      // Update existing access token
+      existingAccessToken.refreshToken = refreshToken;
       existingAccessToken.instanceUrl = instanceUrl;
-      existingAccessToken.accessToken = encryptedAccessToken;
+      existingAccessToken.accessToken = accessToken;
 
       const updatedAccessToken = await existingAccessToken.save();
 
@@ -225,12 +205,12 @@ const createAccessToken = async (req, res) => {
       });
     }
 
-    // Create new access token with encrypted values
+    // Create new access token
     const newAccessToken = new AccessToken({
       scriptId,
-      refreshToken: encryptedRefreshToken,
+      refreshToken,
       instanceUrl,
-      accessToken: encryptedAccessToken,
+      accessToken,
       email,
       userId,
       user: user._id,
@@ -305,6 +285,13 @@ const callbackToken = async (req, res) => {
 
     const tokenData = tokenResponse.data;
 
+    // Explicitly log access token, refresh token, instance URL, script ID, and email
+    console.log("Access Token:", tokenData.access_token);
+    console.log("Refresh Token:", tokenData.refresh_token);
+    console.log("Instance URL:", tokenData.instance_url);
+    console.log("Script ID:", scriptId);
+    console.log("User Email:", email);
+
     // Create userId
     const userId = `${email}_${scriptId}`;
 
@@ -335,26 +322,22 @@ const callbackToken = async (req, res) => {
       `);
     }
 
-    // Encrypt the tokens for secure storage
-    const encryptedRefreshToken = await encryptData(tokenData.refresh_token);
-    const encryptedAccessToken = await encryptData(tokenData.access_token);
-
     // Check if an access token already exists for this user and scriptId
     let accessTokenDoc = await AccessToken.findOne({ userId, scriptId });
 
     if (accessTokenDoc) {
-      // Update existing access token with encrypted values
-      accessTokenDoc.refreshToken = encryptedRefreshToken;
+      // Update existing access token
+      accessTokenDoc.refreshToken = tokenData.refresh_token;
       accessTokenDoc.instanceUrl = tokenData.instance_url;
-      accessTokenDoc.accessToken = encryptedAccessToken;
+      accessTokenDoc.accessToken = tokenData.access_token;
       await accessTokenDoc.save();
     } else {
-      // Create new access token with encrypted values
+      // Create new access token
       accessTokenDoc = new AccessToken({
         scriptId,
-        refreshToken: encryptedRefreshToken,
+        refreshToken: tokenData.refresh_token,
         instanceUrl: tokenData.instance_url,
-        accessToken: encryptedAccessToken,
+        accessToken: tokenData.access_token,
         email,
         userId,
         user: user._id,
@@ -485,7 +468,7 @@ const getAccessTokens = async (req, res) => {
       });
     }
 
-    // Return access tokens (note: tokens will be returned encrypted)
+    // Return access tokens
     res.status(200).json({
       message: "Access tokens retrieved successfully",
       accessTokens: accessTokens,
@@ -497,6 +480,7 @@ const getAccessTokens = async (req, res) => {
     });
   }
 };
+
 
 const createVersion = async (req, res) => {
   try {
@@ -549,6 +533,7 @@ const getAllVersions = async (req, res) => {
     });
   }
 };
+
 
 const checkVersion = async (req, res) => {
   try {
