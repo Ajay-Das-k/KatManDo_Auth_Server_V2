@@ -10,13 +10,20 @@ const AppVersion = require("../models/appVersion");
 const config = require("../config/jwtConfig");
 
 // Salesforce OAuth Configuration
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET =process.env.CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI;
-const TOKEN_URL = process.env.TOKEN_URL;
+// const CLIENT_ID = process.env.CLIENT_ID;
+// const CLIENT_SECRET =process.env.CLIENT_SECRET;
+// const REDIRECT_URI = process.env.REDIRECT_URI;
+// const TOKEN_URL = process.env.TOKEN_URL;
 // Function to handle user registration
 
-
+// Salesforce OAuth Configuration
+const CLIENT_ID =
+  "3MVG9bYGb9rFSjxRGKcqftS.Q4XyGEgKqPBGXj32xT5xpa.NiHWJNJSIUnkuFp5NJKvMIXeUrefkGB1myvxIw";
+const CLIENT_SECRET =
+  "FB591165951E406DEFE30DAE866241F97144E195CE6157E72EC1D7FAEEBC19C8";
+const REDIRECT_URI = "https://katman.io/appscript/callback";
+const TOKEN_URL = "https://login.salesforce.com/services/oauth2/token";
+// Function to handle user registration
 
 
 
