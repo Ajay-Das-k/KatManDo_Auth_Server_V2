@@ -67,15 +67,43 @@ const login = asyncHandler(async (req, res) => {
 
       // Check if there are any access tokens linked to this user
       const accessTokens = await AccessToken.find({ userId: user.userId });
-      
+
       if (accessTokens && accessTokens.length > 0) {
         // Access tokens found, refresh them
         const refreshedTokens = [];
-        
+        console.log(
+          `Found ${accessTokens.length} access tokens for user ${userId}`
+        );
+
         for (const token of accessTokens) {
           try {
+            // Log the token before refreshing
+            console.log(`Token before refresh - ID: ${token._id}`);
+            console.log(
+              `Access token before (first 10 chars): ${token.accessToken.substring(
+                0,
+                10
+              )}...`
+            );
+
             // Call the token refresh function
             const refreshedToken = await refreshSalesforceToken(token);
+
+            // Log the token after refreshing
+            console.log(`Token after refresh - ID: ${token._id}`);
+            console.log(
+              `Access token after (first 10 chars): ${refreshedToken.accessToken.substring(
+                0,
+                10
+              )}...`
+            );
+
+            // Check if token was actually refreshed
+            const tokenChanged =
+              token.accessToken !== refreshedToken.accessToken;
+            console.log(`Token changed: ${tokenChanged}`);
+
+            refreshedToken.wasRefreshed = tokenChanged;
             refreshedTokens.push(refreshedToken);
           } catch (refreshError) {
             console.error(
@@ -88,15 +116,23 @@ const login = asyncHandler(async (req, res) => {
             refreshedTokens.push(token);
           }
         }
-        
+
         accessTokenStatus = {
           found: true,
           count: accessTokens.length,
-          refreshed: refreshedTokens.filter(t => !t.refreshFailed).length,
-          failed: refreshedTokens.filter(t => t.refreshFailed).length
+          refreshed: refreshedTokens.filter((t) => t.wasRefreshed).length,
+          unchanged: refreshedTokens.filter((t) => t.wasRefreshed === false)
+            .length,
+          failed: refreshedTokens.filter((t) => t.refreshFailed).length,
         };
-        
-        message += ", access tokens found and refreshed";
+
+        if (accessTokenStatus.refreshed > 0) {
+          message += ", access tokens found and refreshed";
+        } else if (accessTokenStatus.unchanged > 0) {
+          message += ", access tokens found but no changes needed";
+        } else {
+          message += ", access tokens found but refresh failed";
+        }
       } else {
         accessTokenStatus = { found: false };
         message += ", no access tokens found";
@@ -120,7 +156,7 @@ const login = asyncHandler(async (req, res) => {
         userId: user.userId,
         createdAt: user.createdAt,
       },
-      accessTokenStatus
+      accessTokenStatus,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -130,6 +166,91 @@ const login = asyncHandler(async (req, res) => {
     });
   }
 });
+
+// Helper function to refresh Salesforce token
+const refreshSalesforceToken = async (accessTokenDoc) => {
+  try {
+    // Get refresh token from the document
+    const refreshToken = accessTokenDoc.refreshToken;
+
+    if (!refreshToken) {
+      throw new Error("No refresh token available");
+    }
+
+    // Store original token for comparison
+    const originalAccessToken = accessTokenDoc.accessToken;
+    console.log(`Refreshing token for scriptId: ${accessTokenDoc.scriptId}`);
+    console.log(
+      `Original access token (first 10 chars): ${originalAccessToken.substring(
+        0,
+        10
+      )}...`
+    );
+
+    // Exchange the refresh token for a new access token
+    const tokenResponse = await axios({
+      method: "post",
+      url: TOKEN_URL,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      data: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+      }).toString(),
+    });
+
+    const tokenData = tokenResponse.data;
+    console.log("Token refresh response received");
+
+    // Update the access token document
+    accessTokenDoc.accessToken = tokenData.access_token;
+    console.log(
+      `New access token (first 10 chars): ${accessTokenDoc.accessToken.substring(
+        0,
+        10
+      )}...`
+    );
+    console.log(
+      `Token changed: ${originalAccessToken !== accessTokenDoc.accessToken}`
+    );
+
+    // Salesforce might also return a new refresh token, though not always
+    if (tokenData.refresh_token) {
+      console.log("New refresh token received");
+      accessTokenDoc.refreshToken = tokenData.refresh_token;
+    } else {
+      console.log("No new refresh token received");
+    }
+
+    // Update the instance URL if it changed (unlikely but possible)
+    if (tokenData.instance_url) {
+      console.log(
+        `Instance URL updated from ${accessTokenDoc.instanceUrl} to ${tokenData.instance_url}`
+      );
+      accessTokenDoc.instanceUrl = tokenData.instance_url;
+    }
+
+    // Update the lastRefreshed timestamp
+    accessTokenDoc.lastRefreshed = new Date();
+
+    // Save the updated document
+    await accessTokenDoc.save();
+    console.log(`Access token document saved with ID: ${accessTokenDoc._id}`);
+
+    return accessTokenDoc;
+  } catch (error) {
+    console.error("Error refreshing Salesforce token:", error);
+    console.error(`Error details: ${error.message}`);
+    if (error.response) {
+      console.error(`Response status: ${error.response.status}`);
+      console.error(`Response data:`, error.response.data);
+    }
+    throw error;
+  }
+};
 
 
 /**************************************************************===Login User End===****************************************************/
@@ -228,56 +349,6 @@ const userRegister = async (req, res) => {
   }
 };
 
-// Helper function to refresh Salesforce token
-const refreshSalesforceToken = async (accessTokenDoc) => {
-  try {
-    // Get refresh token from the document
-    const refreshToken = accessTokenDoc.refreshToken;
-
-    if (!refreshToken) {
-      throw new Error("No refresh token available");
-    }
-
-    // Exchange the refresh token for a new access token
-    const tokenResponse = await axios({
-      method: "post",
-      url: TOKEN_URL,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      data: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-      }).toString(),
-    });
-
-    const tokenData = tokenResponse.data;
-
-    // Update the access token document
-    accessTokenDoc.accessToken = tokenData.access_token;
-    // Salesforce might also return a new refresh token, though not always
-    if (tokenData.refresh_token) {
-      accessTokenDoc.refreshToken = tokenData.refresh_token;
-    }
-    // Update the instance URL if it changed (unlikely but possible)
-    if (tokenData.instance_url) {
-      accessTokenDoc.instanceUrl = tokenData.instance_url;
-    }
-
-    // Update the lastRefreshed timestamp
-    accessTokenDoc.lastRefreshed = new Date();
-
-    // Save the updated document
-    await accessTokenDoc.save();
-
-    return accessTokenDoc;
-  } catch (error) {
-    console.error("Error refreshing Salesforce token:", error);
-    throw error;
-  }
-};
 
 const createAccessToken = async (req, res) => {
   try {
