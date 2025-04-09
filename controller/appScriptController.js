@@ -74,15 +74,48 @@ const login = asyncHandler(async (req, res) => {
 
       // Check if there are any access tokens linked to this user
       const accessTokens = await AccessToken.find({ userId: user.userId });
-      
+
+      // Inside the login controller, replace the token refresh section with this:
       if (accessTokens && accessTokens.length > 0) {
         // Access tokens found, refresh them
         const refreshedTokens = [];
-        
+        console.log(
+          `Found ${accessTokens.length} access tokens for user ${userId}`
+        );
+
         for (const token of accessTokens) {
           try {
+            console.log(
+              `Attempting to refresh token ${token._id} for scriptId ${token.scriptId}`
+            );
+
+            // Force token refresh by manually comparing last refresh time
+            const tokenAgeHours =
+              (new Date() - new Date(token.lastRefreshed)) / (1000 * 60 * 60);
+            console.log(`Token age: ${tokenAgeHours.toFixed(2)} hours`);
+
             // Call the token refresh function
             const refreshedToken = await refreshSalesforceToken(token);
+
+            if (refreshedToken.wasRefreshed) {
+              console.log(
+                `Token ${token._id} was successfully refreshed with a new value`
+              );
+            } else {
+              console.log(
+                `Token ${token._id} refresh completed but token value did not change`
+              );
+
+              // If token is older than 24 hours, flag it as potentially problematic
+              if (tokenAgeHours > 24) {
+                console.warn(
+                  `Warning: Token ${token._id} is ${tokenAgeHours.toFixed(
+                    2
+                  )} hours old but didn't refresh`
+                );
+              }
+            }
+
             refreshedTokens.push(refreshedToken);
           } catch (refreshError) {
             console.error(
@@ -95,18 +128,32 @@ const login = asyncHandler(async (req, res) => {
             refreshedTokens.push(token);
           }
         }
-        
+
         accessTokenStatus = {
           found: true,
           count: accessTokens.length,
-          refreshed: refreshedTokens.filter(t => !t.refreshFailed).length,
-          failed: refreshedTokens.filter(t => t.refreshFailed).length
+          refreshed: refreshedTokens.filter((t) => t.wasRefreshed).length,
+          unchanged: refreshedTokens.filter(
+            (t) => t.wasRefreshed === false && !t.refreshFailed
+          ).length,
+          failed: refreshedTokens.filter((t) => t.refreshFailed).length,
+          tokenAges: refreshedTokens.map((t) => ({
+            id: t._id,
+            scriptId: t.scriptId,
+            ageHours: (
+              (new Date() - new Date(t.lastRefreshed)) /
+              (1000 * 60 * 60)
+            ).toFixed(2),
+          })),
         };
-        
-        message += ", access tokens found and refreshed";
-      } else {
-        accessTokenStatus = { found: false };
-        message += ", no access tokens found";
+
+        if (accessTokenStatus.refreshed > 0) {
+          message += ", access tokens found and refreshed";
+        } else if (accessTokenStatus.unchanged > 0) {
+          message += ", access tokens found but no changes needed";
+        } else {
+          message += ", access tokens found but refresh failed";
+        }
       }
     }
 
@@ -140,6 +187,238 @@ const login = asyncHandler(async (req, res) => {
 
 
 /**************************************************************===Login User End===****************************************************/
+
+
+
+// Add this method to your appScriptController.js file
+
+/**
+ * @desc    Get user details and access tokens
+ * @route   GET /api/auth/user
+ * @access  Private
+ */
+const getUserDetails = asyncHandler(async (req, res) => {
+  try {
+    // Get user ID from JWT payload
+    const { userId } = req.user;
+
+    // Find user in database
+    const user = await User.findOne({ userId });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: "User not found",
+      });
+    }
+
+    // Find all access tokens for this user
+    const accessTokens = await AccessToken.find({ userId: user.userId });
+
+    // Format access tokens for response (don't expose sensitive data)
+    const formattedTokens = accessTokens.map(token => ({
+      id: token._id,
+      scriptId: token.scriptId,
+      instanceUrl: token.instanceUrl,
+      lastRefreshed: token.lastRefreshed,
+      createdAt: token.createdAt
+    }));
+
+    // Return user details and access tokens
+    return res.status(200).json({
+      success: true,
+      user: {
+        email: user.email,
+        userId: user.userId,
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin
+      },
+      accessTokens: formattedTokens,
+      tokenCount: formattedTokens.length
+    });
+  } catch (error) {
+    console.error("Error fetching user details:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Server error while fetching user details",
+    });
+  }
+});
+
+
+
+/**
+ * @desc    Fetch data for a specific Salesforce object
+ * @route   GET /api/salesforce/object/:objectName
+ * @access  Private
+ */
+const getSalesforceObject = asyncHandler(async (req, res) => {
+  try {
+    // Get user ID from JWT payload
+    const { userId } = req.user;
+    
+    // Get the Salesforce object name from URL parameters
+    const { objectName } = req.params;
+    
+    // Optional query parameters for filtering
+    const { limit = 10, fields, where } = req.query;
+    
+    // Find the user's Salesforce access token
+    const accessToken = await AccessToken.findOne({ userId });
+    
+    if (!accessToken) {
+      return res.status(404).json({
+        success: false,
+        error: "No Salesforce access token found for this user",
+      });
+    }
+    
+    // Check if token needs refresh (you might want to implement a refresh mechanism)
+    const tokenAge = Date.now() - new Date(accessToken.lastRefreshed).getTime();
+    const TOKEN_EXPIRY = 60 * 60 * 1000; // Example: 1 hour in milliseconds
+    
+    if (tokenAge > TOKEN_EXPIRY) {
+      // Token might be expired, attempt to refresh it
+      // This is a placeholder for your token refresh logic
+      await refreshSalesforceToken(accessToken);
+    }
+    
+    // Construct the Salesforce API URL
+    let url = `${accessToken.instanceUrl}/services/data/v56.0/sobjects/${objectName}/describe`;
+    
+    // If fields are specified, prepare them for the query
+    let queryFields = '';
+    if (fields) {
+      queryFields = fields.split(',').join(',');
+    }
+    
+    // If specific query is needed instead of describe
+    if (queryFields || where) {
+      // Construct a SOQL query
+      let query = `SELECT ${queryFields || 'Id, Name'} FROM ${objectName}`;
+      if (where) {
+        query += ` WHERE ${where}`;
+      }
+      query += ` LIMIT ${limit}`;
+      
+      // Encode the SOQL query
+      const encodedQuery = encodeURIComponent(query);
+      url = `${accessToken.instanceUrl}/services/data/v56.0/query/?q=${encodedQuery}`;
+    }
+    
+    // Make the request to Salesforce
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken.accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      return res.status(response.status).json({
+        success: false,
+        error: errorData[0]?.message || 'Failed to fetch data from Salesforce',
+        salesforceError: errorData
+      });
+    }
+    
+    const data = await response.json();
+    
+    return res.status(200).json({
+      success: true,
+      salesforceObject: objectName,
+      data
+    });
+    
+  } catch (error) {
+    console.error("Error fetching Salesforce object data:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Server error while fetching Salesforce data",
+    });
+  }
+});
+/**
+ * @desc    Execute a custom SOQL query on Salesforce
+ * @route   POST /appscript/salesforce/query
+ * @access  Private
+ */
+const executeSalesforceQuery = asyncHandler(async (req, res) => {
+  try {
+    // Get user ID from JWT payload
+    const { userId } = req.user;
+    
+    // Get the SOQL query from request body
+    const { query } = req.body;
+    
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        error: "SOQL query is required in the request body"
+      });
+    }
+    
+    // Find the user's Salesforce access token
+    const accessToken = await AccessToken.findOne({ userId });
+    
+    if (!accessToken) {
+      return res.status(404).json({
+        success: false,
+        error: "No Salesforce access token found for this user"
+      });
+    }
+    
+    // Check if token needs refresh
+    const tokenAge = Date.now() - new Date(accessToken.lastRefreshed).getTime();
+    const TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
+    
+    if (tokenAge > TOKEN_EXPIRY) {
+      // Token might be expired, attempt to refresh it
+      await refreshSalesforceToken(accessToken);
+    }
+    
+    // Encode the SOQL query
+    const encodedQuery = encodeURIComponent(query);
+    const url = `${accessToken.instanceUrl}/services/data/v56.0/query/?q=${encodedQuery}`;
+    
+    // Make the request to Salesforce
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken.accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      return res.status(response.status).json({
+        success: false,
+        error: errorData[0]?.message || 'Failed to execute query on Salesforce',
+        salesforceError: errorData
+      });
+    }
+    
+    const data = await response.json();
+    
+    return res.status(200).json({
+      success: true,
+      totalRecords: data.totalSize,
+      records: data.records,
+      done: data.done,
+      nextRecordsUrl: data.nextRecordsUrl
+    });
+    
+  } catch (error) {
+    console.error("Error executing Salesforce query:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Server error while executing Salesforce query"
+    });
+  }
+});
 
 const userRegister = async (req, res) => {
   console.log("Request Body:", req.body);
@@ -236,15 +515,36 @@ const userRegister = async (req, res) => {
 };
 
 // Helper function to refresh Salesforce token
+// Helper function to refresh Salesforce token 
 const refreshSalesforceToken = async (accessTokenDoc) => {
   try {
     // Get refresh token from the document
     const refreshToken = accessTokenDoc.refreshToken;
-
+    
     if (!refreshToken) {
       throw new Error("No refresh token available");
     }
-
+    
+    // Store original token for comparison
+    const originalAccessToken = accessTokenDoc.accessToken;
+    console.log(`Refreshing token for scriptId: ${accessTokenDoc.scriptId}`);
+    console.log(`Original access token (first 10 chars): ${originalAccessToken.substring(0, 10)}...`);
+    console.log(`Using refresh token (first 10 chars): ${refreshToken.substring(0, 10)}...`);
+    
+    // Log request details for debugging
+    console.log(`Token URL: ${TOKEN_URL}`);
+    console.log(`Client ID: ${CLIENT_ID ? 'Configured' : 'Missing'}`);
+    console.log(`Client Secret: ${CLIENT_SECRET ? 'Configured' : 'Missing'}`);
+    
+    const requestParams = {
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+    };
+    
+    console.log("Request parameters:", JSON.stringify(requestParams, null, 2));
+    
     // Exchange the refresh token for a new access token
     const tokenResponse = await axios({
       method: "post",
@@ -252,40 +552,75 @@ const refreshSalesforceToken = async (accessTokenDoc) => {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
-      data: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-      }).toString(),
+      data: new URLSearchParams(requestParams).toString(),
     });
-
+    
+    // Log full response for debugging (be careful with sensitive data)
+    console.log("Token refresh response received:");
+    console.log("Response status:", tokenResponse.status);
+    console.log("Response headers:", JSON.stringify(tokenResponse.headers, null, 2));
+    
+    // Log response data with sensitive parts masked
+    const sanitizedResponse = { ...tokenResponse.data };
+    if (sanitizedResponse.access_token) {
+      sanitizedResponse.access_token = `${sanitizedResponse.access_token.substring(0, 10)}...`;
+    }
+    if (sanitizedResponse.refresh_token) {
+      sanitizedResponse.refresh_token = `${sanitizedResponse.refresh_token.substring(0, 10)}...`;
+    }
+    console.log("Response data:", JSON.stringify(sanitizedResponse, null, 2));
+    
+    // Verify that we actually received an access token
     const tokenData = tokenResponse.data;
-
+    if (!tokenData.access_token) {
+      throw new Error("No access token received in Salesforce response");
+    }
+    
     // Update the access token document
     accessTokenDoc.accessToken = tokenData.access_token;
+    console.log(`New access token (first 10 chars): ${accessTokenDoc.accessToken.substring(0, 10)}...`);
+    console.log(`Token changed: ${originalAccessToken !== accessTokenDoc.accessToken}`);
+    
     // Salesforce might also return a new refresh token, though not always
     if (tokenData.refresh_token) {
+      console.log("New refresh token received");
       accessTokenDoc.refreshToken = tokenData.refresh_token;
+    } else {
+      console.log("No new refresh token received");
     }
+    
     // Update the instance URL if it changed (unlikely but possible)
     if (tokenData.instance_url) {
+      console.log(`Instance URL updated from ${accessTokenDoc.instanceUrl} to ${tokenData.instance_url}`);
       accessTokenDoc.instanceUrl = tokenData.instance_url;
     }
-
+    
     // Update the lastRefreshed timestamp
     accessTokenDoc.lastRefreshed = new Date();
-
+    
     // Save the updated document
     await accessTokenDoc.save();
-
+    console.log(`Access token document saved with ID: ${accessTokenDoc._id}`);
+    
+    // Return a flag indicating whether the token actually changed
+    accessTokenDoc.wasRefreshed = originalAccessToken !== accessTokenDoc.accessToken;
+    
     return accessTokenDoc;
   } catch (error) {
     console.error("Error refreshing Salesforce token:", error);
+    console.error(`Error details: ${error.message}`);
+    if (error.response) {
+      console.error(`Response status: ${error.response.status}`);
+      console.error(`Response data:`, error.response.data);
+    } else if (error.request) {
+      console.error("No response received from server");
+      console.error(error.request);
+    } else {
+      console.error("Error during request setup:", error.message);
+    }
     throw error;
   }
 };
-
 const createAccessToken = async (req, res) => {
   try {
     const { scriptId, refreshToken, instanceUrl, accessToken, email } =
@@ -768,5 +1103,8 @@ module.exports = {
   createVersion,
   getAllVersions,
   checkVersion,
-  login
+  login,
+  getUserDetails,
+  getSalesforceObject,
+  executeSalesforceQuery
 };
