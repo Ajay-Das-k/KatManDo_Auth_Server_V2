@@ -1,21 +1,138 @@
-//Ajay is great V1
 
+// Libraries
 const asyncHandler = require("express-async-handler");
+const jwt = require("jsonwebtoken");
+const axios = require("axios");
+
 const User = require("../models/userModel");
 const AccessToken = require("../models/accessTokenModel");
 const AppVersion = require("../models/appVersion");
-const axios = require("axios");
+const config = require("../config/jwtConfig");
 
 // Salesforce OAuth Configuration
-const CLIENT_ID =
-  "3MVG9bYGb9rFSjxRGKcqftS.Q4XyGEgKqPBGXj32xT5xpa.NiHWJNJSIUnkuFp5NJKvMIXeUrefkGB1myvxIw";
-const CLIENT_SECRET =
-  "FB591165951E406DEFE30DAE866241F97144E195CE6157E72EC1D7FAEEBC19C8";
-const REDIRECT_URI = "https://katman.io/appscript/callback";
-const TOKEN_URL = "https://login.salesforce.com/services/oauth2/token";
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET =process.env.CLIENT_SECRET;
+const REDIRECT_URI = process.env.REDIRECT_URI;
+const TOKEN_URL = process.env.TOKEN_URL;
 // Function to handle user registration
 
 
+
+
+
+/**************************************************************===Login User Start===****************************************************/
+ /* @desc    Login user
+ * @route   POST /api/auth/login
+ * @access  Public
+ */
+/* @desc    Login user
+ * @route   POST /api/auth/login
+ * @access  Public
+ */
+const login = asyncHandler(async (req, res) => {
+  try {
+    const { email, googleScriptId } = req.body;
+
+    if (!email || !googleScriptId) {
+      return res.status(400).json({
+        success: false,
+        error: "Email and googleScriptId are required",
+      });
+    }
+
+    // Create userId by combining email and googleScriptId
+    const userId = `${email}_${googleScriptId}`;
+
+    // Check if user exists
+    let user = await User.findOne({ userId });
+    let message;
+    let accessTokenStatus = null;
+
+    if (!user) {
+      // Create a new user
+      user = new User({
+        email,
+        googleScriptId,
+        userId,
+      });
+      await user.save();
+      console.log(`New user created: ${userId}`);
+      message = "New user created";
+    } else {
+      // Update last login time
+      user.lastLogin = Date.now();
+      await user.save();
+      console.log(`User logged in: ${userId}`);
+      message = "User already exists";
+
+      // Check if there are any access tokens linked to this user
+      const accessTokens = await AccessToken.find({ userId: user.userId });
+      
+      if (accessTokens && accessTokens.length > 0) {
+        // Access tokens found, refresh them
+        const refreshedTokens = [];
+        
+        for (const token of accessTokens) {
+          try {
+            // Call the token refresh function
+            const refreshedToken = await refreshSalesforceToken(token);
+            refreshedTokens.push(refreshedToken);
+          } catch (refreshError) {
+            console.error(
+              `Error refreshing token for ${token._id}:`,
+              refreshError
+            );
+            // Include the original token with an error flag
+            token.refreshFailed = true;
+            token.refreshError = refreshError.message;
+            refreshedTokens.push(token);
+          }
+        }
+        
+        accessTokenStatus = {
+          found: true,
+          count: accessTokens.length,
+          refreshed: refreshedTokens.filter(t => !t.refreshFailed).length,
+          failed: refreshedTokens.filter(t => t.refreshFailed).length
+        };
+        
+        message += ", access tokens found and refreshed";
+      } else {
+        accessTokenStatus = { found: false };
+        message += ", no access tokens found";
+      }
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user.userId, email: user.email },
+      config.jwtSecret,
+      { expiresIn: config.jwtExpiration }
+    );
+
+    // Return success with token and message
+    return res.status(200).json({
+      success: true,
+      message,
+      token,
+      user: {
+        email: user.email,
+        userId: user.userId,
+        createdAt: user.createdAt,
+      },
+      accessTokenStatus
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Server error during authentication",
+    });
+  }
+});
+
+
+/**************************************************************===Login User End===****************************************************/
 
 const userRegister = async (req, res) => {
   console.log("Request Body:", req.body);
@@ -644,4 +761,5 @@ module.exports = {
   createVersion,
   getAllVersions,
   checkVersion,
+  login
 };

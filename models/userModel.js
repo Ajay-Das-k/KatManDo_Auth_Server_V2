@@ -18,6 +18,10 @@ const userSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    lastLogin: {
+      type: Date,
+      default: Date.now,
+    },
   },
   {
     timestamps: true,
