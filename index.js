@@ -22,9 +22,11 @@ app.use(morgan("dev"));
 // Import Routes
 const appscriptRoute = require("./routes/appscriptRoute");
 const serverGuiRoute = require("./routes/serverGuiRoute");
+const versionRoute = require("./routes/versionRoute");
 
 // Use Routes
 app.use("/appscript", appscriptRoute); // Handle Appscript specific API logic
+app.use("/version", versionRoute); // Handle Appscript specific API logic
 app.use("/", serverGuiRoute); // Handle Server GUI related routes
 
 // Start the server

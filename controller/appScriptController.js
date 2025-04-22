@@ -190,156 +190,10 @@ const login = asyncHandler(async (req, res) => {
 
 
 
-// Add this method to your appScriptController.js file
-
-/**
- * @desc    Get user details and access tokens
- * @route   GET /api/auth/user
- * @access  Private
- */
-const getUserDetails = asyncHandler(async (req, res) => {
-  try {
-    // Get user ID from JWT payload
-    const { userId } = req.user;
-
-    // Find user in database
-    const user = await User.findOne({ userId });
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: "User not found",
-      });
-    }
-
-    // Find all access tokens for this user
-    const accessTokens = await AccessToken.find({ userId: user.userId });
-
-    // Format access tokens for response (don't expose sensitive data)
-    const formattedTokens = accessTokens.map(token => ({
-      id: token._id,
-      scriptId: token.scriptId,
-      instanceUrl: token.instanceUrl,
-      lastRefreshed: token.lastRefreshed,
-      createdAt: token.createdAt
-    }));
-
-    // Return user details and access tokens
-    return res.status(200).json({
-      success: true,
-      user: {
-        email: user.email,
-        userId: user.userId,
-        createdAt: user.createdAt,
-        lastLogin: user.lastLogin
-      },
-      accessTokens: formattedTokens,
-      tokenCount: formattedTokens.length
-    });
-  } catch (error) {
-    console.error("Error fetching user details:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Server error while fetching user details",
-    });
-  }
-});
 
 
 
-/**
- * @desc    Fetch data for a specific Salesforce object
- * @route   GET /api/salesforce/object/:objectName
- * @access  Private
- */
-const getSalesforceObject = asyncHandler(async (req, res) => {
-  try {
-    // Get user ID from JWT payload
-    const { userId } = req.user;
-    
-    // Get the Salesforce object name from URL parameters
-    const { objectName } = req.params;
-    
-    // Optional query parameters for filtering
-    const { limit = 10, fields, where } = req.query;
-    
-    // Find the user's Salesforce access token
-    const accessToken = await AccessToken.findOne({ userId });
-    
-    if (!accessToken) {
-      return res.status(404).json({
-        success: false,
-        error: "No Salesforce access token found for this user",
-      });
-    }
-    
-    // Check if token needs refresh (you might want to implement a refresh mechanism)
-    const tokenAge = Date.now() - new Date(accessToken.lastRefreshed).getTime();
-    const TOKEN_EXPIRY = 60 * 60 * 1000; // Example: 1 hour in milliseconds
-    
-    if (tokenAge > TOKEN_EXPIRY) {
-      // Token might be expired, attempt to refresh it
-      // This is a placeholder for your token refresh logic
-      await refreshSalesforceToken(accessToken);
-    }
-    
-    // Construct the Salesforce API URL
-    let url = `${accessToken.instanceUrl}/services/data/v56.0/sobjects/${objectName}/describe`;
-    
-    // If fields are specified, prepare them for the query
-    let queryFields = '';
-    if (fields) {
-      queryFields = fields.split(',').join(',');
-    }
-    
-    // If specific query is needed instead of describe
-    if (queryFields || where) {
-      // Construct a SOQL query
-      let query = `SELECT ${queryFields || 'Id, Name'} FROM ${objectName}`;
-      if (where) {
-        query += ` WHERE ${where}`;
-      }
-      query += ` LIMIT ${limit}`;
-      
-      // Encode the SOQL query
-      const encodedQuery = encodeURIComponent(query);
-      url = `${accessToken.instanceUrl}/services/data/v56.0/query/?q=${encodedQuery}`;
-    }
-    
-    // Make the request to Salesforce
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken.accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      return res.status(response.status).json({
-        success: false,
-        error: errorData[0]?.message || 'Failed to fetch data from Salesforce',
-        salesforceError: errorData
-      });
-    }
-    
-    const data = await response.json();
-    
-    return res.status(200).json({
-      success: true,
-      salesforceObject: objectName,
-      data
-    });
-    
-  } catch (error) {
-    console.error("Error fetching Salesforce object data:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Server error while fetching Salesforce data",
-    });
-  }
-});
+
 /**
  * @desc    Execute a custom SOQL query on Salesforce
  * @route   POST /appscript/salesforce/query
@@ -419,100 +273,6 @@ const executeSalesforceQuery = asyncHandler(async (req, res) => {
     });
   }
 });
-
-const userRegister = async (req, res) => {
-  console.log("Request Body:", req.body);
-
-  const { googleScriptId, email } = req.body;
-
-  if (!googleScriptId || !email) {
-    return res.status(400).json({ message: "All fields are required!" });
-  }
-
-  try {
-    // Create userId by combining email and googleScriptId
-    const userId = `${email}_${googleScriptId}`;
-
-    // Check if user exists with the exact combination of email and googleScriptId
-    const existingUser = await User.findOne({ email, googleScriptId });
-
-    if (existingUser) {
-      // Look for associated access tokens
-      const tokens = await AccessToken.find({ user: existingUser._id });
-
-      if (tokens.length > 0) {
-        // Refresh each token before sending the response
-        const refreshedTokens = [];
-
-        for (const token of tokens) {
-          try {
-            // Call the token refresh function
-            const refreshedToken = await refreshSalesforceToken(token);
-            refreshedTokens.push(refreshedToken);
-          } catch (refreshError) {
-            console.error(
-              `Error refreshing token for ${token._id}:`,
-              refreshError
-            );
-            // Include the original token with an error flag
-            token.refreshFailed = true;
-            token.refreshError = refreshError.message;
-            refreshedTokens.push(token);
-          }
-        }
-
-        return res.status(200).json({
-          message: "User already exists. Access tokens found and refreshed.",
-          user: {
-            userId: existingUser.userId,
-            googleScriptId: existingUser.googleScriptId,
-            email: existingUser.email,
-          },
-          accessTokens: refreshedTokens,
-        });
-      } else {
-        return res.status(200).json({
-          message: "User already exists. No access tokens found.",
-          user: {
-            userId: existingUser.userId,
-            googleScriptId: existingUser.googleScriptId,
-            email: existingUser.email,
-          },
-        });
-      }
-    }
-
-    // User does not exist, create new one
-    const newUser = new User({
-      googleScriptId,
-      email,
-      userId: userId, // Explicitly set userId
-    });
-
-    const savedUser = await newUser.save();
-
-    res.status(201).json({
-      message: "User registered successfully!",
-      user: {
-        userId: savedUser.userId,
-        googleScriptId: savedUser.googleScriptId,
-        email: savedUser.email,
-      },
-    });
-  } catch (err) {
-    console.error(err);
-
-    // Handle unique constraint violation
-    if (err.code === 11000) {
-      return res.status(409).json({
-        message:
-          "User with this email and Google Script ID combination already exists",
-      });
-    }
-
-    res.status(500).json({ message: "Server error" });
-  }
-};
 
 // Helper function to refresh Salesforce token
 // Helper function to refresh Salesforce token 
@@ -619,79 +379,6 @@ const refreshSalesforceToken = async (accessTokenDoc) => {
       console.error("Error during request setup:", error.message);
     }
     throw error;
-  }
-};
-const createAccessToken = async (req, res) => {
-  try {
-    const { scriptId, refreshToken, instanceUrl, accessToken, email } =
-      req.body;
-
-    // Validate required fields
-    if (!scriptId || !refreshToken || !instanceUrl || !accessToken || !email) {
-      return res.status(400).json({
-        message:
-          "All fields are required: scriptId, refreshToken, instanceUrl, accessToken, email",
-      });
-    }
-
-    // Create userId
-    const userId = `${email}_${scriptId}`;
-
-    // Find the user by userId
-    const user = await User.findOne({ userId });
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Check if an access token already exists for this user and scriptId
-    const existingAccessToken = await AccessToken.findOne({
-      userId,
-      scriptId,
-    });
-
-    if (existingAccessToken) {
-      // Update existing access token
-      existingAccessToken.refreshToken = refreshToken;
-      existingAccessToken.instanceUrl = instanceUrl;
-      existingAccessToken.accessToken = accessToken;
-
-      const updatedAccessToken = await existingAccessToken.save();
-
-      return res.status(200).json({
-        message: "Access token updated successfully",
-        accessToken: updatedAccessToken,
-      });
-    }
-
-    // Create new access token
-    const newAccessToken = new AccessToken({
-      scriptId,
-      refreshToken,
-      instanceUrl,
-      accessToken,
-      email,
-      userId,
-      user: user._id,
-    });
-
-    const savedAccessToken = await newAccessToken.save();
-
-    res.status(201).json({
-      message: "Access token created successfully",
-      accessToken: savedAccessToken,
-    });
-  } catch (err) {
-    console.error(err);
-
-    // Handle unique constraint violation
-    if (err.code === 11000) {
-      return res.status(409).json({
-        message: "Access token for this user and script already exists",
-      });
-    }
-
-    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -853,258 +540,153 @@ const callbackToken = async (req, res) => {
   }
 };
 
-const deleteAccessToken = async (req, res) => {
+/**
+ * @desc    Delete or revoke a user's access token
+ * @route   GET /appscript/deleteToken
+ * @access  Private
+ */
+const deleteAccessToken = asyncHandler(async (req, res) => {
   try {
-    const { email, googleScriptId } = req.body;
+    // Use the authenticated user ID from the JWT token
+    const { userId } = req.user;
+    
+    // Extract the googleScriptId from query parameters for GET request
+    const { googleScriptId } = req.query;
 
     // Validate input
-    if (!email || !googleScriptId) {
+    if (!googleScriptId) {
       return res.status(400).json({
-        message: "Both email and googleScriptId are required",
+        success: false,
+        message: "googleScriptId is required as a query parameter",
       });
     }
 
-    // Create userId
-    const userId = `${email}_${googleScriptId}`;
+    // Extract email from userId (assuming userId format is 'email_googleScriptId')
+    const email = userId.split('_')[0];
+
+    // Find the user first to confirm they exist
+    const user = await User.findOne({ userId });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
     // Find and delete the access token
     const deletedAccessToken = await AccessToken.findOneAndDelete({
-      email,
+      userId,
       scriptId: googleScriptId,
     });
 
     // If no access token found
     if (!deletedAccessToken) {
       return res.status(404).json({
-        message:
-          "No access token found with the given email and googleScriptId",
+        success: false,
+        message: "No access token found with the given credentials",
       });
     }
 
-    // Remove the reference from the user's accessTokens array
-    await User.findOneAndUpdate(
-      { userId },
-      { $pull: { accessTokens: deletedAccessToken._id } }
-    );
-
     res.status(200).json({
+      success: true,
       message: "Access token deleted successfully",
-      deletedAccessToken: {
+      data: {
         userId,
         googleScriptId: deletedAccessToken.scriptId,
         email: deletedAccessToken.email,
       },
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-const getAccessTokens = async (req, res) => {
-  try {
-    const { email, googleScriptId } = req.query;
-
-    // Validate input
-    if (!email || !googleScriptId) {
-      return res.status(400).json({
-        message: "Email and Google Script ID are required",
-      });
-    }
-
-    // Create userId
-    const userId = `${email}_${googleScriptId}`;
-
-    // Find access tokens for the user
-    const accessTokens = await AccessToken.find({
-      userId: userId,
-    }).select("-__v"); // Exclude version key
-
-    // If no access tokens found
-    if (!accessTokens || accessTokens.length === 0) {
-      return res.status(404).json({
-        message: "No access tokens found for this user",
-      });
-    }
-
-    // Return access tokens
-    res.status(200).json({
-      message: "Access tokens retrieved successfully",
-      accessTokens: accessTokens,
-    });
-  } catch (error) {
-    console.error("Error retrieving access tokens:", error);
-    res.status(500).json({
-      message: "Server error while retrieving access tokens",
+    console.error("Error deleting access token:", err);
+    res.status(500).json({ 
+      success: false, 
+      message: "Server error while deleting access token" 
     });
   }
-};
+});
 
 
-const createVersion = async (req, res) => {
+/**
+ * @desc    Get Salesforce user information
+ * @route   GET /appscript/salesforce/userinfo
+ * @access  Private
+ */
+const getSalesforceUserInfo = asyncHandler(async (req, res) => {
   try {
-    // Check if version already exists
-    const existingVersion = await AppVersion.findOne({
-      versionNumber: req.body.versionNumber,
-    });
-
-    if (existingVersion) {
-      return res.status(409).json({
-        success: false,
-        message: "Version with this number already exists",
-      });
-    }
-
-    // Create new version document
-    const newVersion = new AppVersion(req.body);
-
-    // Save the version to database
-    const savedVersion = await newVersion.save();
-
-    res.status(201).json({
-      success: true,
-      message: "Version created successfully",
-      data: savedVersion,
-    });
-  } catch (error) {
-    console.error("Error creating version:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error creating version",
-      error: error.message,
-    });
-  }
-};
-
-const getAllVersions = async (req, res) => {
-  try {
-    const versions = await AppVersion.find().sort({ releaseDate: -1 });
-    res.status(200).json({
-      success: true,
-      count: versions.length,
-      data: versions,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error fetching versions",
-      error: error.message,
-    });
-  }
-};
-
-
-const checkVersion = async (req, res) => {
-  try {
-    // Get the version number from request body
-    const { versionNumber } = req.body;
-
-    if (!versionNumber) {
-      return res.status(400).json({
-        success: false,
-        message: "Version number is required",
-      });
-    }
-
-    // Find the latest version in the database
-    // Use versionNumber for sorting instead of releaseDate to get the semantically highest version
-    const allVersions = await AppVersion.find({ isStable: true });
-
-    if (allVersions.length === 0) {
+    // Get user ID from JWT payload
+    const { userId } = req.user;
+    
+    // Find the user's Salesforce access token
+    const accessToken = await AccessToken.findOne({ userId });
+    
+    if (!accessToken) {
       return res.status(404).json({
         success: false,
-        message: "No versions found in database",
+        error: "No Salesforce access token found for this user"
       });
     }
-
-    // Sort versions semantically to find the latest one
-    allVersions.sort((a, b) => {
-      return compareVersions(b.versionNumber, a.versionNumber);
+    
+    // Check if token needs refresh
+    const tokenAge = Date.now() - new Date(accessToken.lastRefreshed).getTime();
+    const TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
+    
+    if (tokenAge > TOKEN_EXPIRY) {
+      // Token might be expired, attempt to refresh it
+      await refreshSalesforceToken(accessToken);
+    }
+    
+    // Set up the URL for Salesforce OAuth userinfo endpoint
+    const url = `${accessToken.instanceUrl}/services/oauth2/userinfo`;
+    
+    // Make the request to Salesforce userinfo endpoint
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken.accessToken}`,
+        'Content-Type': 'application/json'
+      }
     });
-
-    const latestVersion = allVersions[0];
-
-    // Debug logging - remove in production
-    console.log(
-      `Comparing user version: ${versionNumber} with latest version: ${latestVersion.versionNumber}`
-    );
-
-    // Compare versions
-    const comparison = compareVersions(
-      versionNumber,
-      latestVersion.versionNumber
-    );
-    console.log(`Comparison result: ${comparison}`);
-
-    const isUpToDate = comparison >= 0;
-
-    if (isUpToDate) {
-      return res.status(200).json({
-        success: true,
-        message: "Version is up to date",
-        isUpToDate: true,
-        currentVersion: versionNumber,
-        latestVersion: latestVersion.versionNumber,
-        environment: latestVersion.environment,
-      });
-    } else {
-      return res.status(200).json({
-        success: true,
-        message: "Version is not up to date",
-        isUpToDate: false,
-        currentVersion: versionNumber,
-        latestVersion: latestVersion.versionNumber,
-        updateRequired: true,
-        latestVersionInfo: {
-          versionNumber: latestVersion.versionNumber,
-          releaseDate: latestVersion.releaseDate,
-          description: latestVersion.description,
-          environment: latestVersion.environment,
-        },
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorData;
+      
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { rawError: errorText };
+      }
+      
+      return res.status(response.status).json({
+        success: false,
+        error: 'Failed to fetch user information from Salesforce',
+        salesforceError: errorData
       });
     }
+    
+    const userData = await response.json();
+    
+    return res.status(200).json({
+      success: true,
+      userInfo: userData
+    });
+    
   } catch (error) {
-    console.error("Error checking version:", error);
-    res.status(500).json({
+    console.error("Error fetching Salesforce user info:", error);
+    return res.status(500).json({
       success: false,
-      message: "Error checking version",
-      error: error.message,
+      error: "Server error while fetching Salesforce user information"
     });
   }
-};
+});
 
-// Improved version comparison function
-function compareVersions(version1, version2) {
-  // Split versions into parts and convert to numbers
-  const parts1 = version1.split(".").map((part) => parseInt(part, 10));
-  const parts2 = version2.split(".").map((part) => parseInt(part, 10));
 
-  // Compare each part
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    // If parts1 has fewer components than parts2, treat missing parts as 0
-    const v1 = i < parts1.length ? parts1[i] : 0;
-    // If parts2 has fewer components than parts1, treat missing parts as 0
-    const v2 = i < parts2.length ? parts2[i] : 0;
-
-    if (v1 > v2) return 1;
-    if (v1 < v2) return -1;
-  }
-
-  // If we get here, the versions are equal
-  return 0;
-}
 
 module.exports = {
-  userRegister,
-  createAccessToken,
   deleteAccessToken,
   callbackToken,
-  getAccessTokens,
-  createVersion,
-  getAllVersions,
-  checkVersion,
   login,
-  getUserDetails,
-  getSalesforceObject,
-  executeSalesforceQuery
+  executeSalesforceQuery,
+  getSalesforceUserInfo,
 };
