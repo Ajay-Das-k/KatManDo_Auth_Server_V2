@@ -753,7 +753,85 @@ const getSalesforceObjects = asyncHandler(async (req, res) => {
     });
   }
 });
+/**
+ * @desc    Get fields for a specific Salesforce object
+ * @route   POST /appscript/getObjectFields
+ * @access  Private
+ */
+const getObjectFields = asyncHandler(async (req, res) => {
+  try {
+    // Get user ID from JWT payload
+    const { userId } = req.user;
+    const { objName } = req.body;
 
+    // Validate object name is provided
+    if (!objName) {
+      return res.status(400).json({
+        success: false,
+        error: "Object name is required"
+      });
+    }
+
+    // Find the user's Salesforce access token
+    const accessToken = await AccessToken.findOne({ userId });
+
+    if (!accessToken) {
+      return res.status(404).json({
+        success: false,
+        error: "No Salesforce access token found for this user",
+      });
+    }
+
+    // Check if token needs refresh
+    const tokenAge = Date.now() - new Date(accessToken.lastRefreshed).getTime();
+    const TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
+
+    if (tokenAge > TOKEN_EXPIRY) {
+      // Token might be expired, attempt to refresh it
+      await refreshSalesforceToken(accessToken);
+    }
+
+    // Set up the URL for Salesforce object description endpoint
+    // Fixed string concatenation issue with template literals
+    const url = `${accessToken.instanceUrl}/services/data/v62.0/sobjects/${objName}/describe`;
+
+    // Make the request to Salesforce object describe endpoint
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken.accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorData;
+
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { rawError: errorText };
+      }
+
+      return res.status(response.status).json({
+        success: false,
+        error: `Failed to fetch fields for object '${objName}' from Salesforce`,
+        salesforceError: errorData,
+      });
+    }
+
+    const objectData = await response.json();
+
+    return res.status(200).json(objectData);
+  } catch (error) {
+    console.error(`Error fetching Salesforce object fields for object:`, error);
+    return res.status(500).json({
+      success: false,
+      error: "Server error while fetching Salesforce object fields",
+    });
+  }
+});
 
 module.exports = {
   deleteAccessToken,
@@ -762,4 +840,5 @@ module.exports = {
   login,
   executeSalesforceQuery,
   getSalesforceUserInfo,
+  getObjectFields,
 };
