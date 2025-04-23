@@ -689,70 +689,67 @@ const getSalesforceObjects = asyncHandler(async (req, res) => {
   try {
     // Get user ID from JWT payload
     const { userId } = req.user;
-    
-    // Get the optional Google Script ID if provided
-    const { googleScriptId } = req.query;
-    
+
     // Find the user's Salesforce access token
     const accessToken = await AccessToken.findOne({ userId });
-    
+
     if (!accessToken) {
       return res.status(404).json({
         success: false,
-        error: "No Salesforce access token found for this user"
+        error: "No Salesforce access token found for this user",
       });
     }
-    
+
     // Check if token needs refresh
     const tokenAge = Date.now() - new Date(accessToken.lastRefreshed).getTime();
     const TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
-    
+
     if (tokenAge > TOKEN_EXPIRY) {
       // Token might be expired, attempt to refresh it
       await refreshSalesforceToken(accessToken);
     }
-    
+
+    // Set up the URL for Salesforce OAuth userinfo endpoint
     const url = `${accessToken.instanceUrl}/services/data/v62.0/sobjects`;
-    
-    // Make the request to Salesforce
+
+    // Make the request to Salesforce userinfo endpoint
     const response = await fetch(url, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Authorization': `Bearer ${accessToken.accessToken}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${accessToken.accessToken}`,
+        "Content-Type": "application/json",
+      },
     });
-    
+
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorText = await response.text();
+      let errorData;
+
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (e) {
+        errorData = { rawError: errorText };
+      }
+
       return res.status(response.status).json({
         success: false,
-        error: errorData[0]?.message || 'Failed to retrieve Salesforce objects',
-        salesforceError: errorData
+        error:
+          "Failed to fetch sobjects information from Salesforce",
+        salesforceError: errorData,
       });
     }
-    
-    const data = await response.json();
-    
-    // Log request if googleScriptId is provided (for tracking)
-    if (googleScriptId) {
-      console.log(`Salesforce objects requested by Google Script ID: ${googleScriptId}`);
-      // Here you could add code to log this request to database if needed
-    }
-    
+
+    const userData = await response.json();
+
     return res.status(200).json({
       success: true,
-      sobjects: data.sobjects,
-      encoding: data.encoding,
-      maxBatchSize: data.maxBatchSize,
-      recentItems: data.recentItems
+      userInfo: userData,
     });
-      
   } catch (error) {
-    console.error("Error retrieving Salesforce objects:", error);
+    console.error("Error fetching Salesforce sobjectsinfo:", error);
     return res.status(500).json({
       success: false,
-      error: "Server error while retrieving Salesforce objects"
+      error: "Server error while fetching Salesforce sobjects information",
     });
   }
 });
