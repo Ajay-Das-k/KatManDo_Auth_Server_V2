@@ -682,13 +682,16 @@ const getSalesforceUserInfo = asyncHandler(async (req, res) => {
 });
 /**
  * @desc    Get all Salesforce objects
- * @route   POST /appscript/salesforce/objects
+ * @route   GET /appscript/salesforce/objects
  * @access  Private
  */
 const getSalesforceObjects = asyncHandler(async (req, res) => {
   try {
     // Get user ID from JWT payload
     const { userId } = req.user;
+    
+    // Get the optional Google Script ID if provided
+    const { googleScriptId } = req.query;
     
     // Find the user's Salesforce access token
     const accessToken = await AccessToken.findOne({ userId });
@@ -731,6 +734,12 @@ const getSalesforceObjects = asyncHandler(async (req, res) => {
     
     const data = await response.json();
     
+    // Log request if googleScriptId is provided (for tracking)
+    if (googleScriptId) {
+      console.log(`Salesforce objects requested by Google Script ID: ${googleScriptId}`);
+      // Here you could add code to log this request to database if needed
+    }
+    
     return res.status(200).json({
       success: true,
       sobjects: data.sobjects,
@@ -747,7 +756,6 @@ const getSalesforceObjects = asyncHandler(async (req, res) => {
     });
   }
 });
-
 
 
 module.exports = {

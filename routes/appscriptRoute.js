@@ -27,10 +27,10 @@ router.get("/deleteToken", auth, appScriptController.deleteAccessToken);
 
 
 
-// @route   POST /appscript/salesforce/objects
+// @route   GET /appscript/salesforce/objects
 // @desc    Get all Salesforce objects
 // @access  Private (requires authentication)
-router.post("/objects", auth, appScriptController.getSalesforceObjects);
+router.get("/objects", auth, appScriptController.getSalesforceObjects);
 
 
 
