@@ -693,10 +693,10 @@ const getSalesforceObjects = asyncHandler(async (req, res) => {
       await refreshSalesforceToken(accessToken);
     }
 
-    // Set up the URL for Salesforce OAuth userinfo endpoint
+    // Set up the URL for Salesforce sobjects endpoint
     const url = `${accessToken.instanceUrl}/services/data/v62.0/sobjects`;
 
-    // Make the request to Salesforce userinfo endpoint
+    // Make the request to Salesforce sobjects endpoint
     const response = await fetch(url, {
       method: "GET",
       headers: {
@@ -717,17 +717,19 @@ const getSalesforceObjects = asyncHandler(async (req, res) => {
 
       return res.status(response.status).json({
         success: false,
-        error:
-          "Failed to fetch sobjects information from Salesforce",
+        error: "Failed to fetch sobjects information from Salesforce",
         salesforceError: errorData,
       });
     }
 
-    const userData = await response.json();
+    const sobjectsData = await response.json();
 
-    return res.status(200).json(userData);
+    return res.status(200).json({
+      success: true,
+      data: sobjectsData
+    });
   } catch (error) {
-    console.error("Error fetching Salesforce sobjectsinfo:", error);
+    console.error("Error fetching Salesforce sobjects:", error);
     return res.status(500).json({
       success: false,
       error: "Server error while fetching Salesforce sobjects information",
