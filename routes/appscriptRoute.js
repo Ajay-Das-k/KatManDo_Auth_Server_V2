@@ -39,6 +39,13 @@ router.get("/objects", auth, appScriptController.getSalesforceObjects);
 router.post("/getObjectFields", auth, appScriptController.getObjectFields);
 
 
+// @route   POST /appscript/insert
+// @desc    Iset ObjetInto Salesforce
+// @access  Private (requires authentication)
+router.post("/insert", auth, appScriptController.insertSalesforceObject);
+
+
+
 // @route   GET /appscript/callback
 // @desc    Handle OAuth callback for token retrieval
 // @access  Public

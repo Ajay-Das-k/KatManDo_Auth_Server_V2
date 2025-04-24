@@ -1,84 +1,79 @@
-function fetchSalesforceUserInfo() {
-  const serverURL = "https://katman.io/";
-  const endpoint = "appscript/userinfo";
-
-  // Ensure the server URL ends with a slash
-  const baseURL = serverURL.endsWith("/") ? serverURL : serverURL + "/";
-
-  // Get the auth token from user properties
-  const authToken =
-    PropertiesService.getUserProperties().getProperty("authToken");
-
-  if (!authToken) {
-    console.error(
-      "No authentication token found. User may need to log in first."
-    );
-    return {
-      success: false,
-      error: "Authentication required. Please log in first.",
-    };
-  }
-
+/**
+ * @desc    Iset ObjetInto Salesforce
+ * @route   POST /appscript/insert
+ * @access  Private
+ */
+const executeSalesforceQuery = asyncHandler(async (req, res) => {
   try {
-    // Set up the request options with the JWT token in the Authorization header
-    const options = {
-      method: "get",
+    // Get user ID from JWT payload
+    const { userId } = req.user;
+    
+    // Get the SOQL query from request body
+    const { query } = req.body;
+    
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        error: "SOQL query is required in the request body"
+      });
+    }
+    
+    // Find the user's Salesforce access token
+    const accessToken = await AccessToken.findOne({ userId });
+    
+    if (!accessToken) {
+      return res.status(404).json({
+        success: false,
+        error: "No Salesforce access token found for this user"
+      });
+    }
+    
+    // Check if token needs refresh
+    const tokenAge = Date.now() - new Date(accessToken.lastRefreshed).getTime();
+    const TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
+    
+    if (tokenAge > TOKEN_EXPIRY) {
+      // Token might be expired, attempt to refresh it
+      await refreshSalesforceToken(accessToken);
+    }
+    
+    // Encode the SOQL query
+    const encodedQuery = encodeURIComponent(query);
+    const url = `${accessToken.instanceUrl}/services/data/v62.0/composite/sobjects`;
+    
+    // Make the request to Salesforce
+    const response = await fetch(url, {
+      method: "POST",
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        Authorization: `Bearer ${accessToken.accessToken}`,
         "Content-Type": "application/json",
       },
-      muteHttpExceptions: true,
-    };
-
-    // Make the request to the Salesforce userinfo endpoint on our server
-    const response = UrlFetchApp.fetch(baseURL + endpoint, options);
-    const responseCode = response.getResponseCode();
-    const responseText = response.getContentText();
-    const responseData = JSON.parse(responseText);
-
-    // Log the response for debugging (optional)
-    console.log("Salesforce user info response:", responseData);
-
-    // Check if request was successful
-    if (responseCode === 200 && responseData.success) {
-      // Get the user info from the response
-      const userInfo = responseData.userInfo;
-
-      // Save the entire userInfo object as a JSON string in script properties
-      PropertiesService.getScriptProperties().setProperty(
-        "salesforceUserInfo",
-        JSON.stringify(userInfo)
-      );
-
-      // Save a timestamp of when the data was retrieved
-      const timestamp = new Date().toISOString();
-      PropertiesService.getScriptProperties().setProperty(
-        "salesforceUserInfoLastUpdated",
-        timestamp
-      );
-
-      return {
-        success: true,
-        message: "Salesforce user information retrieved and saved successfully",
-        userInfo: userInfo,
-      };
-    } else {
-      // Handle error response
-      console.error(
-        "Failed to fetch Salesforce user info:",
-        responseData.error
-      );
-      return {
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      return res.status(response.status).json({
         success: false,
-        error:
-          responseData.error || "Failed to fetch Salesforce user information",
-      };
+        error: errorData[0]?.message || 'Failed to execute query on Salesforce',
+        salesforceError: errorData
+      });
     }
+    
+    const data = await response.json();
+    
+    return res.status(200).json({
+      success: true,
+      totalRecords: data.totalSize,
+      records: data.records,
+      done: data.done,
+      nextRecordsUrl: data.nextRecordsUrl
+    });
+    
   } catch (error) {
-    console.error("Error in fetchSalesforceUserInfo:", error.toString());
-    return {
+    console.error("Error executing Salesforce query:", error);
+    return res.status(500).json({
       success: false,
-      error: "Error connecting to server: " + error.toString(),
-    };
+      error: "Server error while executing Salesforce query"
+    });
   }
-}
+});

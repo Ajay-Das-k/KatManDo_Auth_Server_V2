@@ -180,7 +180,7 @@ const login = asyncHandler(async (req, res) => {
 
 /**
  * @desc    Execute a custom SOQL query on Salesforce
- * @route   POST /appscript/salesforce/query
+ * @route   POST /appscript/query
  * @access  Private
  */
 const executeSalesforceQuery = asyncHandler(async (req, res) => {
@@ -815,8 +815,89 @@ const getObjectFields = asyncHandler(async (req, res) => {
     });
   }
 });
-
+/**
+ * @desc    Insert Object Into Salesforce
+ * @route   POST /appscript/insert
+ * @access  Private
+ */
+const insertSalesforceObject = asyncHandler(async (req, res) => {
+  try {
+    // Get user ID from JWT payload
+    const { userId } = req.user;
+    
+    // Get the records to insert from request body
+    const { records } = req.body;
+    
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Records array is required in the request body"
+      });
+    }
+    
+    // Find the user's Salesforce access token
+    const accessToken = await AccessToken.findOne({ userId });
+    
+    if (!accessToken) {
+      return res.status(404).json({
+        success: false,
+        error: "No Salesforce access token found for this user"
+      });
+    }
+    
+    // Check if token needs refresh
+    const tokenAge = Date.now() - new Date(accessToken.lastRefreshed).getTime();
+    const TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour in milliseconds
+    
+    if (tokenAge > TOKEN_EXPIRY) {
+      // Token might be expired, attempt to refresh it
+      await refreshSalesforceToken(accessToken);
+    }
+    
+    const url = `${accessToken.instanceUrl}/services/data/v62.0/composite/sobjects`;
+    
+    // Prepare the payload for Salesforce composite API
+    const payload = {
+      allOrNone: true,
+      records: records
+    };
+    
+    // Make the request to Salesforce
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      return res.status(response.status).json({
+        success: false,
+        error: errorData[0]?.message || 'Failed to insert records into Salesforce',
+        salesforceError: errorData
+      });
+    }
+    
+    const data = await response.json();
+    
+    return res.status(200).json({
+      success: true,
+      results: data
+    });
+    
+  } catch (error) {
+    console.error("Error inserting Salesforce records:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Server error while inserting Salesforce records"
+    });
+  }
+});
 module.exports = {
+  insertSalesforceObject,
   deleteAccessToken,
   getSalesforceObjects,
   callbackToken,
