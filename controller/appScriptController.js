@@ -23,15 +23,7 @@ const CLIENT_SECRET =
   "FB591165951E406DEFE30DAE866241F97144E195CE6157E72EC1D7FAEEBC19C8";
 const REDIRECT_URI = "https://katman.io/appscript/callback";
 const TOKEN_URL = "https://login.salesforce.com/services/oauth2/token";
-// Function to handle user registration
 
-
-
-/**************************************************************===Login User Start===****************************************************/
- /* @desc    Login user
- * @route   POST /api/auth/login
- * @access  Public
- */
 /* @desc    Login user
  * @route   POST /api/auth/login
  * @access  Public
@@ -184,14 +176,6 @@ const login = asyncHandler(async (req, res) => {
     });
   }
 });
-
-
-/**************************************************************===Login User End===****************************************************/
-
-
-
-
-
 
 
 /**
@@ -741,10 +725,7 @@ const getSalesforceObjects = asyncHandler(async (req, res) => {
 
     const userData = await response.json();
 
-    return res.status(200).json({
-      success: true,
-      userInfo: userData,
-    });
+    return res.status(200).json(userData);
   } catch (error) {
     console.error("Error fetching Salesforce sobjectsinfo:", error);
     return res.status(500).json({
