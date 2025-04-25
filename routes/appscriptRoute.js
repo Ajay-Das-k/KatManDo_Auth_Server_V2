@@ -15,7 +15,9 @@ router.post("/login", appScriptController.login);
 // @access  Private (requires authentication)
 router.post("/query", auth, appScriptController.executeSalesforceQuery);
 
-
+// @route   GET /appscript/salesforce/userinfo
+// @desc    Execute a custom SOQL query on Salesforce
+// @access  Private (requires authentication)
 router.get("/userinfo",auth,appScriptController.getSalesforceUserInfo);
 
 
@@ -40,11 +42,14 @@ router.post("/getObjectFields", auth, appScriptController.getObjectFields);
 
 
 // @route   POST /appscript/insert
-// @desc    Iset ObjetInto Salesforce
+// @desc    Insert ObjetInto Salesforce
 // @access  Private (requires authentication)
 router.post("/insert", auth, appScriptController.insertSalesforceObject);
 
-
+// @route   POST /appscript/upsert
+// @desc    Upsert ObjetInto Salesforce
+// @access  Private (requires authentication)
+router.post("/upsert", auth, appScriptController.upsertSalesforceObject);
 
 // @route   GET /appscript/callback
 // @desc    Handle OAuth callback for token retrieval
