@@ -50,9 +50,15 @@ Your backend is hosted on AWS and accessible via:
 
 **🌐 https://katmando.io**
 
+
+![App Flow](https://png.pngtree.com/png-clipart/20240830/original/pngtree-cat-operating-laptop-png-image_15881120.png)
+
+
 The static domain ensures consistent OAuth2 callback functionality regardless of Google Apps Script duplication.
 
 ---
+![App Flow](https://media.tenor.com/L4ncxhqryfQAAAAj/cat.gif)
+
 
 ## 🔐 Environment Configuration
 
