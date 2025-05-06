@@ -1,5 +1,5 @@
 # Salesforce Data Loader via Google Apps Script & AWS Node.js Server
-![App Flow](https://i.pinimg.com/originals/40/73/11/407311c53b80aeae64ca82887a489648.gif)
+![App Flow](https://cdni.iconscout.com/illustration/premium/thumb/cat-sitting-at-desk-illustration-download-in-svg-png-gif-file-formats--on-laptop-developer-licking-paw-miscellaneous-pack-people-illustrations-4395247.png)
 
 
 This project bridges Google Sheets and Salesforce using a Google Apps Script data loader, with an external Node.js server hosted on AWS. It solves the OAuth2 redirect URL limitations caused by Google Apps Script's changing script IDs when duplicating sheets.
